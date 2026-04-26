@@ -44,10 +44,11 @@ type ChargeRow = {
 
 type SolarRow = {
     chargeKey: string;
+    chargeCode?: string;
     chargeLabel: string;
     customer: string;
     seNumber: string;
-    isChecked: boolean;
+    isChecked?: boolean;
     value: number;
 };
 
@@ -292,12 +293,12 @@ export default function EnergyAllotment() {
                 }
 
                 setChargeAllocationRows(windmillNumbers.map(wm => {
-                    const saved = savedWindmills.find((s: any) => s.windmill === wm);
+                    const saved = savedWindmills.find((s: any) => String(s.windmill || '').trim() === String(wm).trim());
                     if (saved) {
                         return {
                             windmill: wm,
-                            customer: saved.customer || "",
-                            seNumber: saved.seNumber || "",
+                            customer: String(saved.customer || "").trim(),
+                            seNumber: String(saved.seNumber || "").trim(),
                             mrc: saved.mrc || 0,
                             omc: saved.omc || 0,
                             trc: saved.trc || 0,
@@ -442,9 +443,11 @@ export default function EnergyAllotment() {
         const loadAllSolarData = async () => {
             // 1. Fetch labels first
             let currentLabels = { ...chargeLabels };
+            let fullChargeList: any[] = [];
             try {
                 const labelRes = await api.get("/consumption/list");
                 if (Array.isArray(labelRes.data)) {
+                    fullChargeList = labelRes.data;
                     labelRes.data.forEach((item: any) => {
                         if (item.charge_code === 'C001') currentLabels.mrc = item.charge_name;
                         if (item.charge_code === 'C002') currentLabels.omc = item.charge_name;
@@ -496,67 +499,73 @@ export default function EnergyAllotment() {
                     const wmCharges = dataMap[solarWm] || {};
                     console.log(`🔍 Solar Sync: Found charges:`, wmCharges);
 
-                    const initialRows = createInitialSolarRows(currentLabels).map(row => {
-                        let code = "";
-                        if (row.chargeKey === 'mrc') code = 'C001';
-                        if (row.chargeKey === 'omc') code = 'C002';
-                        if (row.chargeKey === 'trc') code = 'C003';
-                        if (row.chargeKey === 'oc1') code = 'C004';
-                        if (row.chargeKey === 'kp') code = 'C005';
-                        if (row.chargeKey === 'ec') code = 'C006';
-                        if (row.chargeKey === 'shc') code = 'C007';
-                        if (row.chargeKey === 'other') code = 'C008';
-                        if (row.chargeKey === 'dc') code = 'C010';
+                    let dynamicRows: SolarRow[] = [];
+                    fullChargeList.forEach(charge => {
+                        const code = charge.charge_code;
+                        const label = charge.charge_name;
+                        
+                        let chargeKey = code.toLowerCase();
+                        if (code === 'C001') chargeKey = 'mrc';
+                        else if (code === 'C002') chargeKey = 'omc';
+                        else if (code === 'C003') chargeKey = 'trc';
+                        else if (code === 'C004') chargeKey = 'oc1';
+                        else if (code === 'C005') chargeKey = 'kp';
+                        else if (code === 'C006') chargeKey = 'ec';
+                        else if (code === 'C007') chargeKey = 'shc';
+                        else if (code === 'C008') chargeKey = 'other';
+                        else if (code === 'C010') chargeKey = 'dc';
 
                         const savedRow = savedSolar.find((s: any) => s.charge_code === code);
-                        if (savedRow) {
-                            return {
-                                ...row,
-                                customer: savedRow.customer || "",
-                                seNumber: savedRow.seNumber || "",
-                                value: savedRow.value || 0,
-                                isChecked: true
-                            };
-                        }
-
                         const val = wmCharges[code] || 0;
-                        return {
-                            ...row,
-                            value: val,
-                            isChecked: val > 0
-                        };
+
+                        if (val > 0 || (savedRow && savedRow.value > 0)) {
+                            dynamicRows.push({
+                                chargeKey: chargeKey,
+                                chargeCode: code,
+                                chargeLabel: label,
+                                customer: savedRow ? String(savedRow.customer || "").trim() : "",
+                                seNumber: savedRow ? String(savedRow.seNumber || "").trim() : "",
+                                value: savedRow?.value || val,
+                                isChecked: true
+                            });
+                        }
                     });
-                    setSolarAllocationRows(initialRows);
+                    setSolarAllocationRows(dynamicRows);
                 } else {
-                    const fallbackRows = createInitialSolarRows(currentLabels).map(row => {
-                        let code = "";
-                        if (row.chargeKey === 'mrc') code = 'C001';
-                        if (row.chargeKey === 'omc') code = 'C002';
-                        if (row.chargeKey === 'trc') code = 'C003';
-                        if (row.chargeKey === 'oc1') code = 'C004';
-                        if (row.chargeKey === 'kp') code = 'C005';
-                        if (row.chargeKey === 'ec') code = 'C006';
-                        if (row.chargeKey === 'shc') code = 'C007';
-                        if (row.chargeKey === 'other') code = 'C008';
-                        if (row.chargeKey === 'dc') code = 'C010';
+                    let fallbackRows: SolarRow[] = [];
+                    fullChargeList.forEach(charge => {
+                        const code = charge.charge_code;
+                        const label = charge.charge_name;
+                        
+                        let chargeKey = code.toLowerCase();
+                        if (code === 'C001') chargeKey = 'mrc';
+                        else if (code === 'C002') chargeKey = 'omc';
+                        else if (code === 'C003') chargeKey = 'trc';
+                        else if (code === 'C004') chargeKey = 'oc1';
+                        else if (code === 'C005') chargeKey = 'kp';
+                        else if (code === 'C006') chargeKey = 'ec';
+                        else if (code === 'C007') chargeKey = 'shc';
+                        else if (code === 'C008') chargeKey = 'other';
+                        else if (code === 'C010') chargeKey = 'dc';
 
                         const savedRow = savedSolar.find((s: any) => s.charge_code === code);
-                        if (savedRow) {
-                            return {
-                                ...row,
-                                customer: savedRow.customer || "",
-                                seNumber: savedRow.seNumber || "",
+                        if (savedRow && savedRow.value > 0) {
+                            fallbackRows.push({
+                                chargeKey: chargeKey,
+                                chargeCode: code,
+                                chargeLabel: label,
+                                customer: savedRow ? String(savedRow.customer || "").trim() : "",
+                                seNumber: savedRow ? String(savedRow.seNumber || "").trim() : "",
                                 value: savedRow.value || 0,
                                 isChecked: true
-                            };
+                            });
                         }
-                        return row;
                     });
                     setSolarAllocationRows(fallbackRows);
                 }
             } catch (error) {
                 console.error("Error fetching solar charges:", error);
-                setSolarAllocationRows(createInitialSolarRows(currentLabels));
+                setSolarAllocationRows([]);
             }
         };
 
@@ -983,7 +992,7 @@ export default function EnergyAllotment() {
             });
 
             const windmillChargesToSave = chargeAllocationRows.filter(r => r.customer && r.seNumber);
-            const solarRowsToSave = solarAllocationRows.filter(r => r.customer && r.seNumber && r.isChecked);
+            const solarRowsToSave = solarAllocationRows.filter(r => r.customer && r.seNumber && r.value > 0);
 
             // Block save only for non-list tabs when nothing to save
             if (activeTab !== "list" && rowsWithData.length === 0 && windmillChargesToSave.length === 0 && solarRowsToSave.length === 0) {
@@ -1187,16 +1196,18 @@ export default function EnergyAllotment() {
                             (c.service_number === row.seNumber || c.sc_number === row.seNumber)
                         );
 
-                        let code = "";
-                        if (row.chargeKey === 'mrc') code = 'C001';
-                        else if (row.chargeKey === 'omc') code = 'C002';
-                        else if (row.chargeKey === 'trc') code = 'C003';
-                        else if (row.chargeKey === 'oc1') code = 'C004';
-                        else if (row.chargeKey === 'kp') code = 'C005';
-                        else if (row.chargeKey === 'ec') code = 'C006';
-                        else if (row.chargeKey === 'shc') code = 'C007';
-                        else if (row.chargeKey === 'other') code = 'C008';
-                        else if (row.chargeKey === 'dc') code = 'C010';
+                        let code = row.chargeCode || "";
+                        if (!code) {
+                            if (row.chargeKey === 'mrc') code = 'C001';
+                            else if (row.chargeKey === 'omc') code = 'C002';
+                            else if (row.chargeKey === 'trc') code = 'C003';
+                            else if (row.chargeKey === 'oc1') code = 'C004';
+                            else if (row.chargeKey === 'kp') code = 'C005';
+                            else if (row.chargeKey === 'ec') code = 'C006';
+                            else if (row.chargeKey === 'shc') code = 'C007';
+                            else if (row.chargeKey === 'other') code = 'C008';
+                            else if (row.chargeKey === 'dc') code = 'C010';
+                        }
 
                         return {
                             charge_code: code,
@@ -2037,13 +2048,6 @@ export default function EnergyAllotment() {
                                                                 <TableCell className="py-2 pl-4 pr-3 text-sm text-slate-700 font-medium w-[240px] border-r">
                                                                     <div className="flex items-center justify-between">
                                                                         <span>{row.chargeLabel}</span>
-                                                                        <input
-                                                                            type="checkbox"
-                                                                            className="accent-indigo-700 h-4 w-4 rounded border-slate-300"
-                                                                            checked={row.isChecked}
-                                                                            onChange={(e) => handleSolarCheckChange(index, e.target.checked)}
-                                                                            disabled={false}
-                                                                        />
                                                                     </div>
                                                                 </TableCell>
                                                                 <TableCell className="p-1.5 w-[180px] border-r">
@@ -2079,7 +2083,7 @@ export default function EnergyAllotment() {
                                                                 </TableCell>
                                                                 <TableCell className="p-1.5 pr-4">
                                                                     <Input
-                                                                        disabled={!isEditing || !row.isChecked}
+                                                                        disabled={!isEditing}
                                                                         className="h-8 text-center text-xs border-slate-200 shadow-none focus-visible:ring-1 bg-white disabled:bg-white disabled:text-black font-semibold rounded-sm px-2 text-black"
                                                                         value={row.value || ""}
                                                                         onChange={(e) => handleSolarFieldChange(index, e.target.value)}
