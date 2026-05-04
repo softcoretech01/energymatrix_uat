@@ -1,0 +1,258 @@
+[2026-05-03 16:12:32.426207] --- START UPLOAD: 1798 - Adjusted report.pdf ---
+[2026-05-03 16:12:32.427141] Params: WM=2, Year=2026, Month=2
+[2026-05-03 16:12:32.684016] CRITICAL ERROR: (1305, 'PROCEDURE windmill.sp_get_windmill_number does not exist')
+[2026-05-03 16:12:32.756201] Traceback (most recent call last):
+  File "D:\DOWNLOADS\energymatrix_uat\Python\app\routers\actual_allotment_v5.py", line 116, in upload_actual_allotment
+    cursor.callproc("sp_get_windmill_number", (windmill_id,))
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\cursors.py", line 269, in callproc
+    self._query(q)
+    ~~~~~~~~~~~^^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\cursors.py", line 322, in _query
+    conn.query(q)
+    ~~~~~~~~~~^^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\connections.py", line 575, in query
+    self._affected_rows = self._read_query_result(unbuffered=unbuffered)
+                          ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\connections.py", line 826, in _read_query_result
+    result.read()
+    ~~~~~~~~~~~^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\connections.py", line 1203, in read
+    first_packet = self.connection._read_packet()
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\connections.py", line 782, in _read_packet
+    packet.raise_for_error()
+    ~~~~~~~~~~~~~~~~~~~~~~^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\protocol.py", line 219, in raise_for_error
+    err.raise_mysql_exception(self._data)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\err.py", line 150, in raise_mysql_exception
+    raise errorclass(errno, errval)
+pymysql.err.OperationalError: (1305, 'PROCEDURE windmill.sp_get_windmill_number does not exist')
+
+[2026-05-03 16:17:46.114571] --- START UPLOAD: 1798 - Adjusted report.pdf ---
+[2026-05-03 16:17:46.115276] Params: WM=2, Year=2026, Month=2
+[2026-05-03 16:17:46.422599] CRITICAL ERROR: (1305, 'PROCEDURE windmill.sp_get_windmill_number does not exist')
+[2026-05-03 16:17:46.426598] Traceback (most recent call last):
+  File "D:\DOWNLOADS\energymatrix_uat\Python\app\routers\actual_allotment_v5.py", line 116, in upload_actual_allotment
+    cursor.callproc("sp_get_windmill_number", (windmill_id,))
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\cursors.py", line 269, in callproc
+    self._query(q)
+    ~~~~~~~~~~~^^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\cursors.py", line 322, in _query
+    conn.query(q)
+    ~~~~~~~~~~^^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\connections.py", line 575, in query
+    self._affected_rows = self._read_query_result(unbuffered=unbuffered)
+                          ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\connections.py", line 826, in _read_query_result
+    result.read()
+    ~~~~~~~~~~~^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\connections.py", line 1203, in read
+    first_packet = self.connection._read_packet()
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\connections.py", line 782, in _read_packet
+    packet.raise_for_error()
+    ~~~~~~~~~~~~~~~~~~~~~~^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\protocol.py", line 219, in raise_for_error
+    err.raise_mysql_exception(self._data)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\err.py", line 150, in raise_mysql_exception
+    raise errorclass(errno, errval)
+pymysql.err.OperationalError: (1305, 'PROCEDURE windmill.sp_get_windmill_number does not exist')
+
+[2026-05-03 16:18:09.746996] --- START UPLOAD: 1798 - Adjusted report.pdf ---
+[2026-05-03 16:18:09.747782] Params: WM=2, Year=2026, Month=2
+[2026-05-03 16:18:10.005707] CRITICAL ERROR: (1305, 'PROCEDURE windmill.sp_get_windmill_number does not exist')
+[2026-05-03 16:18:10.007975] Traceback (most recent call last):
+  File "D:\DOWNLOADS\energymatrix_uat\Python\app\routers\actual_allotment_v5.py", line 116, in upload_actual_allotment
+    cursor.callproc("sp_get_windmill_number", (windmill_id,))
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\cursors.py", line 269, in callproc
+    self._query(q)
+    ~~~~~~~~~~~^^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\cursors.py", line 322, in _query
+    conn.query(q)
+    ~~~~~~~~~~^^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\connections.py", line 575, in query
+    self._affected_rows = self._read_query_result(unbuffered=unbuffered)
+                          ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\connections.py", line 826, in _read_query_result
+    result.read()
+    ~~~~~~~~~~~^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\connections.py", line 1203, in read
+    first_packet = self.connection._read_packet()
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\connections.py", line 782, in _read_packet
+    packet.raise_for_error()
+    ~~~~~~~~~~~~~~~~~~~~~~^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\protocol.py", line 219, in raise_for_error
+    err.raise_mysql_exception(self._data)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\err.py", line 150, in raise_mysql_exception
+    raise errorclass(errno, errval)
+pymysql.err.OperationalError: (1305, 'PROCEDURE windmill.sp_get_windmill_number does not exist')
+
+[2026-05-03 16:20:51.116221] --- START UPLOAD: 1798 - Adjusted report.pdf ---
+[2026-05-03 16:20:51.117153] Params: WM=2, Year=2026, Month=2
+[2026-05-03 16:20:51.819384] CRITICAL ERROR: (1305, 'PROCEDURE windmill.sp_get_windmill_number does not exist')
+[2026-05-03 16:20:51.823082] Traceback (most recent call last):
+  File "D:\DOWNLOADS\energymatrix_uat\Python\app\routers\actual_allotment_v5.py", line 116, in upload_actual_allotment
+    cursor.callproc("windmill.sp_get_windmill_number", (windmill_id,))
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\cursors.py", line 269, in callproc
+    self._query(q)
+    ~~~~~~~~~~~^^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\cursors.py", line 322, in _query
+    conn.query(q)
+    ~~~~~~~~~~^^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\connections.py", line 575, in query
+    self._affected_rows = self._read_query_result(unbuffered=unbuffered)
+                          ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\connections.py", line 826, in _read_query_result
+    result.read()
+    ~~~~~~~~~~~^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\connections.py", line 1203, in read
+    first_packet = self.connection._read_packet()
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\connections.py", line 782, in _read_packet
+    packet.raise_for_error()
+    ~~~~~~~~~~~~~~~~~~~~~~^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\protocol.py", line 219, in raise_for_error
+    err.raise_mysql_exception(self._data)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\err.py", line 150, in raise_mysql_exception
+    raise errorclass(errno, errval)
+pymysql.err.OperationalError: (1305, 'PROCEDURE windmill.sp_get_windmill_number does not exist')
+
+[2026-05-03 16:22:44.227791] --- START UPLOAD: 1798 - Adjusted report.pdf ---
+[2026-05-03 16:22:44.228490] Params: WM=2, Year=2026, Month=2
+[2026-05-03 16:22:44.484364] CRITICAL ERROR: (1305, 'PROCEDURE windmill.sp_get_all_windmill_number does not exist')
+[2026-05-03 16:22:44.488417] Traceback (most recent call last):
+  File "D:\DOWNLOADS\energymatrix_uat\Python\app\routers\actual_allotment_v5.py", line 116, in upload_actual_allotment
+    cursor.callproc("windmill.sp_get_all_windmill_number", (windmill_id,))
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\cursors.py", line 269, in callproc
+    self._query(q)
+    ~~~~~~~~~~~^^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\cursors.py", line 322, in _query
+    conn.query(q)
+    ~~~~~~~~~~^^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\connections.py", line 575, in query
+    self._affected_rows = self._read_query_result(unbuffered=unbuffered)
+                          ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\connections.py", line 826, in _read_query_result
+    result.read()
+    ~~~~~~~~~~~^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\connections.py", line 1203, in read
+    first_packet = self.connection._read_packet()
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\connections.py", line 782, in _read_packet
+    packet.raise_for_error()
+    ~~~~~~~~~~~~~~~~~~~~~~^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\protocol.py", line 219, in raise_for_error
+    err.raise_mysql_exception(self._data)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\err.py", line 150, in raise_mysql_exception
+    raise errorclass(errno, errval)
+pymysql.err.OperationalError: (1305, 'PROCEDURE windmill.sp_get_all_windmill_number does not exist')
+
+[2026-05-03 16:23:19.329950] --- START UPLOAD: 1798 - Adjusted report.pdf ---
+[2026-05-03 16:23:19.330953] Params: WM=2, Year=2026, Month=2
+[2026-05-03 16:23:19.501895] CRITICAL ERROR: (1146, "Table 'windmill.master_windmill' doesn't exist")
+[2026-05-03 16:23:19.505625] Traceback (most recent call last):
+  File "D:\DOWNLOADS\energymatrix_uat\Python\app\routers\actual_allotment_v5.py", line 116, in upload_actual_allotment
+    cursor.callproc("windmill.sp_get_all_windmill_numbers", ())
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\cursors.py", line 269, in callproc
+    self._query(q)
+    ~~~~~~~~~~~^^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\cursors.py", line 322, in _query
+    conn.query(q)
+    ~~~~~~~~~~^^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\connections.py", line 575, in query
+    self._affected_rows = self._read_query_result(unbuffered=unbuffered)
+                          ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\connections.py", line 826, in _read_query_result
+    result.read()
+    ~~~~~~~~~~~^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\connections.py", line 1203, in read
+    first_packet = self.connection._read_packet()
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\connections.py", line 782, in _read_packet
+    packet.raise_for_error()
+    ~~~~~~~~~~~~~~~~~~~~~~^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\protocol.py", line 219, in raise_for_error
+    err.raise_mysql_exception(self._data)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\err.py", line 150, in raise_mysql_exception
+    raise errorclass(errno, errval)
+pymysql.err.ProgrammingError: (1146, "Table 'windmill.master_windmill' doesn't exist")
+
+[2026-05-03 16:26:07.182798] --- START UPLOAD: 1798 - Adjusted report.pdf ---
+[2026-05-03 16:26:07.191937] Params: WM=2, Year=2026, Month=2
+[2026-05-03 16:26:07.383699] CRITICAL ERROR: tuple indices must be integers or slices, not str
+[2026-05-03 16:26:07.385919] Traceback (most recent call last):
+  File "D:\DOWNLOADS\energymatrix_uat\Python\app\routers\actual_allotment_v5.py", line 125, in upload_actual_allotment
+    selected_wm = next((r for r in wm_rows if r["id"] == windmill_id), None)
+  File "D:\DOWNLOADS\energymatrix_uat\Python\app\routers\actual_allotment_v5.py", line 125, in <genexpr>
+    selected_wm = next((r for r in wm_rows if r["id"] == windmill_id), None)
+                                              ~^^^^^^
+TypeError: tuple indices must be integers or slices, not str
+
+[2026-05-03 16:27:08.506171] --- START UPLOAD: 1798 - Adjusted report.pdf ---
+[2026-05-03 16:27:08.507183] Params: WM=2, Year=2026, Month=2
+[2026-05-03 16:27:08.926438] Expected WM No: 039224391798
+[2026-05-03 16:27:08.928105] Temp file saved: D:\DOWNLOADS\energymatrix_uat\Python\uploads\actual_allotment\TEMP_2_1798 - Adjusted report.pdf
+[2026-05-03 16:27:09.375112] PDF Header Match: Month=2, Year=2026
+[2026-05-03 16:27:09.424423] Extracted PDF Meta: Month=2, Year=2026, Rows=6
+[2026-05-03 16:27:09.425075] Extracted PDF Services: ['039224391798']
+[2026-05-03 16:27:10.118678] CRITICAL ERROR: (1048, "Column 'service_id' cannot be null")
+[2026-05-03 16:27:10.125127] Traceback (most recent call last):
+  File "D:\DOWNLOADS\energymatrix_uat\Python\app\routers\actual_allotment_v5.py", line 192, in upload_actual_allotment
+    ActualAllotment.save_allotment(cursor, windmill_id, service_id, allotment_total, year, month, file_path, user["id"])
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\DOWNLOADS\energymatrix_uat\Python\app\models\windmill_models.py", line 272, in save_allotment
+    cursor.callproc(
+    ~~~~~~~~~~~~~~~^
+        "windmill.sp_save_actual_allotment",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        (windmill_id, service_id, allotment_total, year, month, pdf_path, user_id)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\cursors.py", line 269, in callproc
+    self._query(q)
+    ~~~~~~~~~~~^^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\cursors.py", line 322, in _query
+    conn.query(q)
+    ~~~~~~~~~~^^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\connections.py", line 575, in query
+    self._affected_rows = self._read_query_result(unbuffered=unbuffered)
+                          ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\connections.py", line 826, in _read_query_result
+    result.read()
+    ~~~~~~~~~~~^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\connections.py", line 1203, in read
+    first_packet = self.connection._read_packet()
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\connections.py", line 782, in _read_packet
+    packet.raise_for_error()
+    ~~~~~~~~~~~~~~~~~~~~~~^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\protocol.py", line 219, in raise_for_error
+    err.raise_mysql_exception(self._data)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "D:\DOWNLOADS\ENERGYMATRIX_UAT\Python\venv\Lib\site-packages\pymysql\err.py", line 150, in raise_mysql_exception
+    raise errorclass(errno, errval)
+pymysql.err.IntegrityError: (1048, "Column 'service_id' cannot be null")
+
+[2026-05-03 16:28:14.112533] --- START UPLOAD: 1798 - Adjusted report.pdf ---
+[2026-05-03 16:28:14.113165] Params: WM=2, Year=2026, Month=2
+[2026-05-03 16:28:14.297270] Expected WM No: 039224391798
+[2026-05-03 16:28:14.298963] Temp file saved: D:\DOWNLOADS\energymatrix_uat\Python\uploads\actual_allotment\TEMP_2_1798 - Adjusted report.pdf
+[2026-05-03 16:28:14.730411] PDF Header Match: Month=2, Year=2026
+[2026-05-03 16:28:14.775294] Extracted PDF Meta: Month=2, Year=2026, Rows=6
+[2026-05-03 16:28:14.776073] Extracted PDF Services: ['039224391798']
+[2026-05-03 16:28:15.377459] SUCCESS: Processed 4 rows
+[2026-05-03 16:29:00.723041] --- START UPLOAD: 1145- adjusted report.pdf ---
+[2026-05-03 16:29:00.723805] Params: WM=3, Year=2026, Month=2
+[2026-05-03 16:29:01.397433] Expected WM No: 039214391145
+[2026-05-03 16:29:01.406432] Temp file saved: D:\DOWNLOADS\energymatrix_uat\Python\uploads\actual_allotment\TEMP_3_1145- adjusted report.pdf
+[2026-05-03 16:29:01.837553] PDF Header Match: Month=2, Year=2026
+[2026-05-03 16:29:01.903252] Extracted PDF Meta: Month=2, Year=2026, Rows=6
+[2026-05-03 16:29:01.904021] Extracted PDF Services: ['039214391145']
+[2026-05-03 16:29:02.500950] SUCCESS: Processed 4 rows

@@ -364,6 +364,7 @@ BEGIN
     DECLARE v_whlc_cost DECIMAL(18,4);
     DECLARE v_whlc_discount DECIMAL(18,4);
     DECLARE v_whlc_factor DECIMAL(18,4) DEFAULT 0.54; -- Fallback to 0.54
+    DECLARE v_sgt_constant DECIMAL(18,4) DEFAULT 0.00;
 
     -- Handler
     DECLARE CONTINUE HANDLER FOR NOT FOUND 
@@ -382,6 +383,13 @@ BEGIN
     INTO v_whlc_cost, v_whlc_discount
     FROM masters.master_consumption_chargers
     WHERE REPLACE(LOWER(charge_name), ' ', '') = 'wheelingcharges'
+    LIMIT 1;
+
+    -- 2.1 Get SGT Constant
+    SELECT cost 
+    INTO v_sgt_constant
+    FROM masters.master_consumption_chargers
+    WHERE charge_code = 'C011'
     LIMIT 1;
 
     -- 3. Calculate dynamic factor: (cost * discount / 100)
@@ -440,7 +448,8 @@ BEGIN
                 customer_id,
                 sc_id,
                 energy_number,
-                calculated_wheeling_value
+                calculated_wheeling_value,
+                self_gen_tax
             ) VALUES (
                 p_eb_bill_header_id,
                 v_bill_year,
@@ -448,7 +457,8 @@ BEGIN
                 v_customer_id,
                 v_sc_id,
                 p_energy_number COLLATE utf8mb4_unicode_ci,
-                v_calculated_wheeling
+                v_calculated_wheeling,
+                ROUND(v_calculated_wheeling * v_sgt_constant, 2)
             );
 
         END IF;

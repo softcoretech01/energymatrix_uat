@@ -166,8 +166,9 @@ async def save_solar_allotment(payload: dict, user: dict = Depends(get_current_u
         for item in items:
             code = item.get("charge_code")
             val = item.get("value")
+            sys_val = item.get("system_value", 0)
             if val is not None:
-                params = (customer_id, solar_id, service_id, year, month, user["id"], code, val)
+                params = (customer_id, solar_id, service_id, year, month, user["id"], code, sys_val, val)
                 cursor.callproc("sp_save_solar_charge_allotment", params)
         
         conn.commit()
@@ -272,15 +273,31 @@ async def export_energy_allotment(
                 mw.windmill_number           AS `Windmill Number`,
                 h.year                       AS `Year`,
                 h.month                      AS `Month`,
-                MAX(CASE WHEN d.slot='c1' THEN d.allocated ELSE 0 END) AS `C1 (Units)`,
-                MAX(CASE WHEN d.slot='c1_bank' THEN d.allocated ELSE 0 END) AS `C1 Banking`,
-                MAX(CASE WHEN d.slot='c2' THEN d.allocated ELSE 0 END) AS `C2 (Units)`,
-                MAX(CASE WHEN d.slot='c2_bank' THEN d.allocated ELSE 0 END) AS `C2 Banking`,
-                MAX(CASE WHEN d.slot='c4' THEN d.allocated ELSE 0 END) AS `C4 (Units)`,
-                MAX(CASE WHEN d.slot='c4_bank' THEN d.allocated ELSE 0 END) AS `C4 Banking`,
-                MAX(CASE WHEN d.slot='c5' THEN d.allocated ELSE 0 END) AS `C5 (Units)`,
-                MAX(CASE WHEN d.slot='c5_bank' THEN d.allocated ELSE 0 END) AS `C5 Banking`,
-                MAX(CASE WHEN d.slot='consumption' THEN d.allocated ELSE 0 END) AS `Consumption`
+                
+                -- Summary Fields
+                (SELECT MAX(grand_total) FROM masters.customer_agreed WHERE customer_id = h.customer_id) AS `Total Agreed Units`,
+                (SELECT COALESCE(SUM(aa.allotment_total), 0) 
+                 FROM windmill.actual_allotment aa 
+                 WHERE aa.service_id = h.service_id 
+                   AND aa.year = h.year 
+                   AND aa.month = h.month) AS `Manual Adjusted Units`,
+
+                -- Slot Units
+                MAX(CASE WHEN d.slot='c1' THEN d.power_allocated ELSE 0 END) AS `C1 Power Plant`,
+                MAX(CASE WHEN d.slot='c1' THEN d.banking_allocated ELSE 0 END) AS `C1 Banking`,
+                MAX(CASE WHEN d.slot='c1' THEN d.allocated ELSE 0 END) AS `C1 Total Allotted`,
+                
+                MAX(CASE WHEN d.slot='c2' THEN d.power_allocated ELSE 0 END) AS `C2 Power Plant`,
+                MAX(CASE WHEN d.slot='c2' THEN d.banking_allocated ELSE 0 END) AS `C2 Banking`,
+                MAX(CASE WHEN d.slot='c2' THEN d.allocated ELSE 0 END) AS `C2 Total Allotted`,
+                
+                MAX(CASE WHEN d.slot='c4' THEN d.power_allocated ELSE 0 END) AS `C4 Power Plant`,
+                MAX(CASE WHEN d.slot='c4' THEN d.banking_allocated ELSE 0 END) AS `C4 Banking`,
+                MAX(CASE WHEN d.slot='c4' THEN d.allocated ELSE 0 END) AS `C4 Total Allotted`,
+                
+                MAX(CASE WHEN d.slot='c5' THEN d.power_allocated ELSE 0 END) AS `C5 Power Plant`,
+                MAX(CASE WHEN d.slot='c5' THEN d.banking_allocated ELSE 0 END) AS `C5 Banking`,
+                MAX(CASE WHEN d.slot='c5' THEN d.allocated ELSE 0 END) AS `C5 Total Allotted`
             FROM windmill.energy_allotment_header h
             JOIN windmill.energy_allotment_details d ON h.allocation_id = d.allocation_id
             JOIN masters.master_windmill mw ON h.windmill_id = mw.id
@@ -331,6 +348,8 @@ async def export_charge_allotment(
         # 1. WINDMILL CHARGES
         windmill_query = """
             SELECT
+                h.year                       AS `Year`,
+                h.month                      AS `Month`,
                 mw.windmill_number           AS `Windmill No`,
                 mc.customer_name             AS `Customer`,
                 cs.service_number            AS `Service Number`,
@@ -344,7 +363,8 @@ async def export_charge_allotment(
                 MAX(CASE WHEN mcc.charge_code='C008' THEN d.charge_amount ELSE 0 END) AS `Other Charges`,
                 MAX(CASE WHEN mcc.charge_code='C010' THEN d.charge_amount ELSE 0 END) AS `Disconnection Charges`,
                 MAX(CASE WHEN mcc.charge_code='C009' THEN d.charge_amount ELSE 0 END) AS `Wheeling Charges`,
-                MAX(CASE WHEN mcc.charge_code='C011' THEN d.charge_amount ELSE 0 END) AS `Self Generation Tax`
+                MAX(CASE WHEN mcc.charge_code='C011' THEN d.charge_amount ELSE 0 END) AS `Self Generation Tax`,
+                SUM(d.charge_amount)         AS `Total Charges`
             FROM windmill.charge_allotment_header h
             JOIN windmill.charge_allotment_details d ON h.id = d.header_id
             JOIN masters.master_windmill mw ON h.windmill_id = mw.id
@@ -352,26 +372,36 @@ async def export_charge_allotment(
             LEFT JOIN masters.customer_service cs ON h.service_id = cs.id
             LEFT JOIN masters.master_consumption_chargers mcc ON d.charge_id = mcc.id
             WHERE h.year = %s AND h.month = %s AND h.status = '1'
-            GROUP BY h.id, mw.windmill_number, mc.customer_name, cs.service_number
-            ORDER BY mw.windmill_number
+            GROUP BY h.id, h.year, h.month, mw.windmill_number, mc.customer_name, cs.service_number
+            ORDER BY mw.windmill_number, mc.customer_name
         """
         cursor.execute(windmill_query, (year, month))
         windmill_rows = cursor.fetchall()
 
-        # 2. SOLAR CHARGES
+        # 2. SOLAR CHARGES (Wide format for consistency)
         solar_query = """
             SELECT
+                h.year                       AS `Year`,
+                h.month                      AS `Month`,
                 mc.customer_name             AS `Customer`,
                 cs.service_number            AS `Service Number`,
-                mcc.charge_name              AS `Charge Name`,
-                d.charge_amount              AS `Value`
+                MAX(CASE WHEN mcc.charge_code='C001' THEN d.charge_amount ELSE 0 END) AS `Meter Reading Charges`,
+                MAX(CASE WHEN mcc.charge_code='C003' THEN d.charge_amount ELSE 0 END) AS `Transmission Charges`,
+                MAX(CASE WHEN mcc.charge_code='C004' THEN d.charge_amount ELSE 0 END) AS `System Operation Charges`,
+                MAX(CASE WHEN mcc.charge_code='C005' THEN d.charge_amount ELSE 0 END) AS `RKvah Penalty`,
+                MAX(CASE WHEN mcc.charge_code='C006' THEN d.charge_amount ELSE 0 END) AS `Excess Unit Charges`,
+                MAX(CASE WHEN mcc.charge_code='C007' THEN d.charge_amount ELSE 0 END) AS `SLDC Charges`,
+                MAX(CASE WHEN mcc.charge_code='C008' THEN d.charge_amount ELSE 0 END) AS `Other Charges`,
+                MAX(CASE WHEN mcc.charge_code='C010' THEN d.charge_amount ELSE 0 END) AS `Disconnection Charges`,
+                SUM(d.charge_amount)         AS `Total Charges`
             FROM windmill.solar_charge_allotment_header h
             JOIN windmill.solar_charge_allotment_details d ON h.id = d.header_id
             LEFT JOIN masters.master_customers mc ON h.customer_id = mc.id
             LEFT JOIN masters.customer_service cs ON h.service_id = cs.id
             LEFT JOIN masters.master_consumption_chargers mcc ON d.charge_id = mcc.id
             WHERE h.year = %s AND h.month = %s AND h.status = '1'
-            ORDER BY mc.customer_name, cs.service_number
+            GROUP BY h.id, h.year, h.month, mc.customer_name, cs.service_number
+            ORDER BY mc.customer_name
         """
         cursor.execute(solar_query, (year, month))
         solar_rows = cursor.fetchall()
@@ -449,7 +479,8 @@ async def get_all_charge_allotments_by_month(
                 mc.customer_name             AS `customer`,
                 cs.service_number            AS `seNumber`,
                 mcc.charge_code              AS `charge_code`,
-                d.charge_amount              AS `value`
+                d.charge_amount              AS `system_value`,
+                d.allocation                 AS `value`
             FROM windmill.solar_charge_allotment_header h
             JOIN windmill.solar_charge_allotment_details d ON h.id = d.header_id
             LEFT JOIN masters.master_customers mc ON h.customer_id = mc.id

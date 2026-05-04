@@ -81,7 +81,7 @@ def perform_solar_charge_calculation(db: Session, solar_id: int, month: int, yea
                 calc_str = f"({cost} * 0.5) * {days} Days"
             elif code == "C008": 
                 value = cost
-                calc_str = f"If anything pending"
+                calc_str = f"Same as statement"
             elif code == "C010": 
                 value = solar_units * cost 
                 calc_str = f"{solar_units} Units * {cost} Cost"
@@ -204,8 +204,8 @@ def compare_solar_charges(eb_header_id: int, db: Session = Depends(get_db)):
                 pdf_charges_map[cid] = pdf_charges_map.get(cid, 0) + float(amt or 0)
         while cursor.nextset(): pass
 
-        # 4. FORCE UPDATE IDs 5 and 6 in solar.charge_calculation if they exist in statement
-        for sid in [5, 6]:
+        # 4. FORCE UPDATE IDs 5, 6 and 8 in solar.charge_calculation if they exist in statement
+        for sid in [5, 6, 8]:
             if sid in pdf_charges_map:
                 val = pdf_charges_map[sid]
                 cursor.callproc("solar.sp_update_solar_charge_calculation_value", (val, solar_id, month_int, year_val, sid))
@@ -234,7 +234,7 @@ def compare_solar_charges(eb_header_id: int, db: Session = Depends(get_db)):
             calc_val = calc_map.get(cid, 0)
             stmt_val = pdf_charges_map.get(cid, 0)
             name = names_map.get(cid, f"Charge {cid}")
-            if cid in [5, 6]: calc_val = stmt_val
+            if cid in [5, 6, 8]: calc_val = stmt_val
             
             # Skip Wheeling Charges (C009) and Self Generation Tax (C011) as requested
             cursor.callproc("masters.sp_get_charge_code_by_id", (cid,))

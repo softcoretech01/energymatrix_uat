@@ -26,6 +26,7 @@ class Customer(Base):
     email = Column(String(150))
     address = Column(String(100))
     gst_number = Column(String(50))
+    rate_per_unit = Column(DECIMAL(10, 2), default=0.00)
     status = Column(String(1)) # binary(1)
     
     created_by = Column(Integer)

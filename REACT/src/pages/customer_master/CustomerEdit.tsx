@@ -70,8 +70,8 @@ export default function CustomerEdit(): JSX.Element {
                 setEmail(data.email || "");
                 setAddress(data.address || "");
                 setGstNumber(data.gst_number || "");
-                setStatus(data.status === 1 ? "active" : "inactive");
-                setIsPosted(data.is_submitted === 1 || data.status === "Posted" || data.status === 1);
+                setStatus(Number(data.status) === 1 ? "active" : "inactive");
+                setIsPosted(Number(data.is_submitted) === 1);
                 // Optionally: set other state if available
             }
             // Fetch SE numbers
@@ -139,6 +139,9 @@ export default function CustomerEdit(): JSX.Element {
                     console.log("Fetched agreed units:", agreedData);
                     if (agreedData.total_agreed_units !== undefined && agreedData.total_agreed_units !== null) {
                         setTotalAgreedUnits(String(agreedData.total_agreed_units));
+                    }
+                    if (agreedData.rate_per_unit !== undefined && agreedData.rate_per_unit !== null) {
+                        setRatePerUnit(String(agreedData.rate_per_unit));
                     }
                     if (agreedData.unit_allocation && agreedData.unit_allocation.length > 0) {
                         setUnitAllocation(agreedData.unit_allocation);
@@ -237,6 +240,7 @@ export default function CustomerEdit(): JSX.Element {
 
     // Agreed Units State
     const [totalAgreedUnits, setTotalAgreedUnits] = useState<string>("");
+    const [ratePerUnit, setRatePerUnit] = useState<string>("");
     const [unitAllocation, setUnitAllocation] = useState(
         ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(month => ({
             month,
@@ -249,8 +253,7 @@ export default function CustomerEdit(): JSX.Element {
 
     const handleAllocationChange = (index: number, field: string, value: string) => {
         const newAllocation = [...unitAllocation];
-        // @ts-ignore
-        newAllocation[index][field] = value;
+        newAllocation[index] = { ...newAllocation[index], [field]: value };
         setUnitAllocation(newAllocation);
     };
 
@@ -270,7 +273,7 @@ export default function CustomerEdit(): JSX.Element {
                     edc_circle: newEdcCircle,
                     status: newSeStatus === "active" ? 1 : 0,
                     remarks: newSeRemarks,
-                    is_submitted: true,
+                    is_submitted: 1,
                 };
                 const res = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/customers/${id}/se/${editSeId}`, {
                     method: "PUT",
@@ -320,7 +323,7 @@ export default function CustomerEdit(): JSX.Element {
                 const rowSeNum = (se.service_number ?? se.se_number ?? se.seNumber)?.toString().trim();
                 const rowKvaId = (se.kva_id ?? kvaList.find(k => (k.kva || k.capacity) === se.kva)?.id ?? se.kva)?.toString();
                 const rowEdcId = (se.edc_circle_id ?? se.edc_circle ?? se.edcCircle)?.toString();
-                
+
                 return rowSeNum === newSeNumber.toString().trim() &&
                     rowKvaId === (newKva || "").toString() &&
                     rowEdcId === (newEdcCircle || "").toString();
@@ -365,7 +368,7 @@ export default function CustomerEdit(): JSX.Element {
             const contactPayload = {
                 contact_person_name: newContactPerson,
                 phone_number: newContactNumber,
-                is_submitted: true
+                is_submitted: 1
             };
             try {
                 const res = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/customers/${id}/contact/${editContactId}`, {
@@ -402,7 +405,7 @@ export default function CustomerEdit(): JSX.Element {
             const contactPayload = {
                 contact_person_name: newContactPerson,
                 phone_number: newContactNumber,
-                is_submitted: true
+                is_submitted: 1
             };
             try {
                 const res = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/customers/${id}/contact`, {
@@ -436,7 +439,6 @@ export default function CustomerEdit(): JSX.Element {
         }
     };
 
-    // Update handler
     // Update handler
     const handleUpdate = async () => {
         if (activeTab === "agreed_units") {
@@ -533,6 +535,7 @@ export default function CustomerEdit(): JSX.Element {
                     },
                     body: JSON.stringify({
                         total_agreed_units: Number(totalAgreedUnits),
+                        rate_per_unit: ratePerUnit,
                         unit_allocation: unitAllocation
                     }),
                 });
@@ -618,9 +621,9 @@ export default function CustomerEdit(): JSX.Element {
                         default: return "Customer updated successfully.";
                     }
                 };
-                
+
                 toast.success(getSuccessMsg());
-                
+
                 if (isPosting) {
                     navigate("/master/customers");
                 } else {
@@ -834,440 +837,453 @@ export default function CustomerEdit(): JSX.Element {
                                         </Select>
                                     </div>
                                 </div>
-                            </TabsContent>
+                    </TabsContent>
 
-                            <TabsContent value="se_number" className="mt-0 space-y-6 pt-2">
-                                <div className="space-y-6 max-w-4xl">
-                                    <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end bg-slate-50 p-4 rounded-lg border border-slate-200">
-                                        <div className="md:col-span-3 space-y-2">
-                                            <label className="text-sm font-semibold text-slate-700">Service Number</label>
-                                            <Input
-                                                value={newSeNumber}
-                                                onChange={(e) => setNewSeNumber(e.target.value)}
-                                                placeholder="Enter SE Number"
-                                                className="bg-white border-slate-300 h-10 text-sm focus:ring-blue-500"
-                                                disabled={isReadOnly}
-                                            />
-                                        </div>
-                                        <div className="md:col-span-3 space-y-2">
-                                            <label className="text-sm font-semibold text-slate-700">KVA</label>
-                                            <Select value={newKva} onValueChange={setNewKva} disabled={isReadOnly}>
-                                                <SelectTrigger className="bg-white border-slate-300 h-10 text-sm focus:ring-blue-500">
-                                                    <SelectValue placeholder="Select KVA" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {kvaList.length === 0 ? (
-                                                        <SelectItem value="no-kva" disabled>No KVA found</SelectItem>
-                                                    ) : (
-                                                        kvaList.map(kva => (
-                                                            // @ts-ignore - kva property from transmission_routes
-                                                            <SelectItem key={kva.id} value={String(kva.id)}>
-                                                                {kva.kva || kva.capacity}
-                                                            </SelectItem>
-                                                        ))
-                                                    )}
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-                                        <div className="md:col-span-3 space-y-2">
-                                            <label className="text-sm font-semibold text-slate-700">EDC Circle</label>
-                                            <Select value={newEdcCircle} onValueChange={setNewEdcCircle} disabled={isReadOnly}>
-                                                <SelectTrigger className="bg-white border-slate-300 h-10 text-sm focus:ring-blue-500">
-                                                    <SelectValue placeholder="Select Circle" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {edcList.length === 0 ? (
-                                                        <SelectItem value="no-edc" disabled>
-                                                            No EDC circles found
-                                                        </SelectItem>
-                                                    ) : (
-                                                        edcList.map(edc => (
-                                                            <SelectItem key={edc.id} value={edc.id.toString()}>
-                                                                {edc.edc_name || edc.edc_circle || `EDC #${edc.id}`}
-                                                            </SelectItem>
-                                                        ))
-                                                    )}
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-                                        <div className="md:col-span-3 space-y-2">
-                                            <label className="text-sm font-semibold text-slate-700">Status</label>
-                                            <Select value={newSeStatus} onValueChange={setNewSeStatus} disabled={isReadOnly}>
-                                                <SelectTrigger className="bg-white border-slate-300 h-10 text-sm focus:ring-blue-500">
-                                                    <SelectValue placeholder="Select Status" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="active">Active</SelectItem>
-                                                    <SelectItem value="inactive">Inactive</SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-                                        <div className="md:col-span-12 space-y-2">
-                                            <label className="text-sm font-semibold text-slate-700">Remarks</label>
-                                            <Input
-                                                value={newSeRemarks}
-                                                onChange={(e) => setNewSeRemarks(e.target.value)}
-                                                placeholder="Enter Remarks"
-                                                maxLength={50}
-                                                className="bg-white border-slate-300 h-10 text-sm focus:ring-blue-500"
-                                                disabled={isReadOnly}
-                                            />
-                                            <div className="text-right text-xs text-slate-500">{newSeRemarks.length}/50</div>
-                                        </div>
-                                        <div className="md:col-span-12 flex justify-end pt-2">
-                                            <Button
-                                                onClick={handleAddSeNumber}
-                                                className={cn("bg-cyan-700 hover:bg-cyan-800 text-white gap-2", isPosted && "opacity-50 cursor-not-allowed")}
-                                                disabled={isReadOnly}
-                                            >
-                                                <UserPlus className="h-4 w-4" /> Add
-                                            </Button>
-                                        </div>
-                                    </div>
-
-                                    <div className="border border-slate-200 rounded-md overflow-hidden">
-                                        <table className="w-full text-sm text-left border-collapse">
-                                            <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
-                                                <tr>
-                                                    <th className="px-4 py-3 w-16 border-r border-slate-200">#</th>
-                                                    <th className="px-4 py-3 border-r border-slate-200">SE Number</th>
-                                                    <th className="px-4 py-3 border-r border-slate-200">KVA</th>
-                                                    <th className="px-4 py-3 border-r border-slate-200">EDC Circle</th>
-                                                    <th className="px-4 py-3 border-r border-slate-200">Remarks</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-slate-100">
-                                                {seNumbers.length === 0 ? (
-                                                    <tr>
-                                                        <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
-                                                            No SE Numbers added yet.
-                                                        </td>
-                                                    </tr>
-                                                ) : (
-                                                    seNumbers.map((item, index) => (
-                                                        <tr key={item.id} className="hover:bg-slate-50">
-                                                            <td className="px-4 py-3 text-slate-500 border-r border-slate-100">{index + 1}</td>
-                                                            <td className="px-4 py-3 font-medium text-slate-900 border-r border-slate-100">
-                                                                {item.service_number ?? item.se_number ?? item.seNumber}
-                                                            </td>
-                                                            <td className="px-4 py-3 text-slate-600 border-r border-slate-100">
-                                                                {/* @ts-ignore - kva from join or lookup */}
-                                                                {kvaList.find(k => String(k.id) === String(item.kva_id || item.kva))?.kva || kvaList.find(k => String(k.id) === String(item.kva_id || item.kva))?.capacity || item.kva_id || item.kva}
-                                                            </td>
-                                                            <td className="px-4 py-3 text-slate-600 border-r border-slate-100">
-                                                                {edcList.find(e =>
-                                                                    e.id.toString() === (
-                                                                        item.edc_circle_id ?? item.edc_circle ?? item.edcCircle
-                                                                    )?.toString()
-                                                                )?.edc_name ||
-                                                                    edcList.find(e =>
-                                                                        e.id.toString() === (
-                                                                            item.edc_circle_id ?? item.edc_circle ?? item.edcCircle
-                                                                        )?.toString()
-                                                                    )?.edc_circle ||
-                                                                    item.edc_circle_id ||
-                                                                    item.edc_circle ||
-                                                                    item.edcCircle ||
-                                                                    ""}
-                                                            </td>
-                                                            <td className="px-4 py-3 text-slate-600 border-r border-slate-100">{item.remarks}</td>
-                                                            <td className="px-4 py-3 text-center flex justify-center gap-2">
-                                                                <Button
-                                                                    variant="ghost"
-                                                                    size="icon"
-                                                                    className={cn("h-8 w-8 text-blue-500 hover:bg-blue-50", isPosted && "opacity-50 cursor-not-allowed")}
-                                                                    disabled={isReadOnly}
-                                                                    onClick={() => {
-                                                                        setEditSeId(item.id);
-                                                                        setNewSeNumber(
-                                                                            (item.service_number ?? item.se_number ?? item.seNumber)?.toString() || ""
-                                                                        );
-                                                                        setNewKva((item.kva_id ?? item.kva)?.toString() || "");
-                                                                        setNewEdcCircle(
-                                                                            (item.edc_circle_id ?? item.edc_circle ?? item.edcCircle)?.toString() || ""
-                                                                        );
-                                                                        setNewSeRemarks(item.remarks || "");
-                                                                        setNewSeStatus(
-                                                                            item.status === 1 ||
-                                                                                item.status === "1" ||
-                                                                                item.status === "active"
-                                                                                ? "active"
-                                                                                : "inactive"
-                                                                        );
-                                                                    }}
-                                                                >
-                                                                    <Edit className="h-4 w-4" />
-                                                                </Button>
-                                                            </td>
-                                                        </tr>
-                                                    ))
-                                                )}
-                                            </tbody>
-                                        </table>
-                                    </div>
+                    <TabsContent value="se_number" className="mt-0 space-y-6 pt-2">
+                        <div className="space-y-6 max-w-4xl">
+                            <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end bg-slate-50 p-4 rounded-lg border border-slate-200">
+                                <div className="md:col-span-3 space-y-2">
+                                    <label className="text-sm font-semibold text-slate-700">Service Number</label>
+                                    <Input
+                                        value={newSeNumber}
+                                        onChange={(e) => setNewSeNumber(e.target.value)}
+                                        placeholder="Enter SE Number"
+                                        className="bg-white border-slate-300 h-10 text-sm focus:ring-blue-500"
+                                        disabled={isReadOnly}
+                                    />
                                 </div>
-                            </TabsContent>
-
-                            <TabsContent value="contact_details" className="mt-0 space-y-6 pt-2">
-                                <div className="space-y-6 max-w-6xl">
-                                    <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end bg-slate-50 p-4 rounded-lg border border-slate-200">
-                                        <div className="md:col-span-4 space-y-2">
-                                            <label className="text-sm font-semibold text-slate-700">Contact Person</label>
-                                            <Input
-                                                value={newContactPerson}
-                                                onChange={(e) => setNewContactPerson(e.target.value)}
-                                                placeholder="Name"
-                                                className="bg-white border-slate-300 h-10 text-sm focus:ring-blue-500"
-                                                disabled={isReadOnly}
-                                            />
-                                        </div>
-                                        <div className="md:col-span-4 space-y-2">
-                                            <label className="text-sm font-semibold text-slate-700">Phone</label>
-                                            <Input
-                                                value={newContactNumber}
-                                                onChange={(e) => setNewContactNumber(e.target.value)}
-                                                placeholder="Phone Number"
-                                                className="bg-white border-slate-300 h-10 text-sm focus:ring-blue-500"
-                                                disabled={isReadOnly}
-                                            />
-                                        </div>
-                                        <div className="md:col-span-4">
-                                            <Button
-                                                onClick={handleAddContact}
-                                                className={cn("w-full bg-indigo-600 hover:bg-indigo-700 text-white h-10", isPosted && "opacity-50 cursor-not-allowed")}
-                                                disabled={isReadOnly}
-                                            >
-                                                <UserPlus className="h-4 w-4 mr-2" /> Add
-                                            </Button>
-                                        </div>
-                                    </div>
-
-                                    <div className="border border-slate-200 rounded-md overflow-hidden">
-                                        <table className="w-full text-sm text-left border-collapse">
-                                            <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
-                                                <tr>
-                                                    <th className="px-4 py-3 w-16 border-r border-slate-200">#</th>
-                                                    <th className="px-4 py-3 border-r border-slate-200">Person Name</th>
-                                                    <th className="px-4 py-3 border-r border-slate-200">Phone</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-slate-100">
-                                                {contacts.length === 0 ? (
-                                                    <tr>
-                                                        <td colSpan={3} className="px-4 py-8 text-center text-slate-500">
-                                                            No contacts added yet.
-                                                        </td>
-                                                    </tr>
-                                                ) : (
-                                                    contacts.map((item, index) => (
-                                                        <tr key={item.id} className="hover:bg-slate-50">
-                                                            <td className="px-4 py-3 text-slate-500 border-r border-slate-100">{index + 1}</td>
-                                                            <td className="px-4 py-3 font-medium text-slate-900 border-r border-slate-100">
-                                                                {item.person || item.contact_person || item.contact_person_name}
-                                                            </td>
-                                                            <td className="px-4 py-3 text-slate-600 border-r border-slate-100">
-                                                                {item.number || item.phone || item.phone_number}
-                                                            </td>
-                                                            <td className="px-4 py-3 text-center flex gap-2 justify-center">
-                                                                <Button
-                                                                    variant="ghost"
-                                                                    size="icon"
-                                                                    className={cn("h-8 w-8 text-blue-500 hover:bg-blue-50", isPosted && "opacity-50 cursor-not-allowed")}
-                                                                    disabled={isReadOnly}
-                                                                    onClick={() => {
-                                                                        setNewContactPerson(
-                                                                            item.person || item.contact_person || item.contact_person_name || ""
-                                                                        );
-                                                                        setNewContactNumber(
-                                                                            item.number || item.phone || item.phone_number || ""
-                                                                        );
-                                                                        setEditContactId(item.id);
-                                                                    }}
-                                                                >
-                                                                    <Edit className="h-4 w-4" />
-                                                                </Button>
-                                                            </td>
-                                                        </tr>
-                                                    ))
-                                                )}
-                                            </tbody>
-                                        </table>
-                                    </div>
+                                <div className="md:col-span-3 space-y-2">
+                                    <label className="text-sm font-semibold text-slate-700">KVA</label>
+                                    <Select value={newKva} onValueChange={setNewKva} disabled={isReadOnly}>
+                                        <SelectTrigger className="bg-white border-slate-300 h-10 text-sm focus:ring-blue-500">
+                                            <SelectValue placeholder="Select KVA" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {kvaList.length === 0 ? (
+                                                <SelectItem value="no-kva" disabled>No KVA found</SelectItem>
+                                            ) : (
+                                                kvaList.map(kva => (
+                                                    // @ts-ignore - kva property from transmission_routes
+                                                    <SelectItem key={kva.id} value={String(kva.id)}>
+                                                        {kva.kva || kva.capacity}
+                                                    </SelectItem>
+                                                ))
+                                            )}
+                                        </SelectContent>
+                                    </Select>
                                 </div>
-                            </TabsContent>
-
-                            <TabsContent value="uploads" className="mt-0 space-y-6 pt-2">
-                                <div className="space-y-6 max-w-5xl">
-                                    <div className="border border-slate-200 rounded-md overflow-hidden">
-                                        <table className="w-full text-sm text-left border-collapse">
-                                            <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
-                                                <tr>
-                                                    <th className="px-4 py-3 w-16 border-r border-slate-200">#</th>
-                                                    <th className="px-4 py-3 border-r border-slate-200">Document Name</th>
-                                                    <th className="px-4 py-3 border-r border-slate-200 w-1/3">Upload</th>
-                                                    <th className="px-4 py-3 border-r border-slate-200 w-1/3">File Name</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-slate-100">
-                                                {documents.map((item, index) => (
-                                                    <tr key={item.id} className="hover:bg-slate-50">
-                                                        <td className="px-4 py-3 text-slate-500 border-r border-slate-100">{index + 1}</td>
-                                                        <td className="px-4 py-3 font-medium text-slate-900 border-r border-slate-100">{item.name}</td>
-                                                        <td className="px-4 py-3 border-r border-slate-100">
-                                                            <Input
-                                                                type="file"
-                                                                onChange={(e) => handleFileChange(item.id, e.target.files ? e.target.files[0] : null)}
-                                                                className="bg-white border-slate-300 h-9 text-xs focus:ring-blue-500 file:mr-4 file:py-1 file:px-2 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100"
-                                                                disabled={isReadOnly}
-                                                            />
-                                                        </td>
-                                                        <td className="px-4 py-3 text-slate-600 border-r border-slate-100">
-                                                            {item.fileName ? (
-                                                                <a
-                                                                    href={item.file ? URL.createObjectURL(item.file) : "#"}
-                                                                    target="_blank"
-                                                                    rel="noopener noreferrer"
-                                                                    className="text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
-                                                                >
-                                                                    {item.fileName}
-                                                                </a>
-                                                            ) : (
-                                                                <span className="text-slate-400 italic">No file selected</span>
-                                                            )}
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
+                                <div className="md:col-span-3 space-y-2">
+                                    <label className="text-sm font-semibold text-slate-700">EDC Circle</label>
+                                    <Select value={newEdcCircle} onValueChange={setNewEdcCircle} disabled={isReadOnly}>
+                                        <SelectTrigger className="bg-white border-slate-300 h-10 text-sm focus:ring-blue-500">
+                                            <SelectValue placeholder="Select Circle" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {edcList.length === 0 ? (
+                                                <SelectItem value="no-edc" disabled>
+                                                    No EDC circles found
+                                                </SelectItem>
+                                            ) : (
+                                                edcList.map(edc => (
+                                                    <SelectItem key={edc.id} value={edc.id.toString()}>
+                                                        {edc.edc_name || edc.edc_circle || `EDC #${edc.id}`}
+                                                    </SelectItem>
+                                                ))
+                                            )}
+                                        </SelectContent>
+                                    </Select>
                                 </div>
-                            </TabsContent>
-
-                            <TabsContent value="agreed_units" className="mt-0 space-y-6 pt-2">
-                                <div className="space-y-6 max-w-5xl">
-                                    <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
-                                        <div className="space-y-2 max-w-xs">
-                                            <label className="text-sm font-semibold text-slate-700">Total Agreed Units</label>
-                                            <Input
-                                                type="number"
-                                                value={totalAgreedUnits}
-                                                onChange={(e) => setTotalAgreedUnits(e.target.value)}
-                                                placeholder="Enter Total Agreed Units"
-                                                className="bg-white border-slate-300 h-10 text-sm focus:ring-blue-500"
-                                                disabled={isReadOnly}
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <div className="border border-slate-200 rounded-md overflow-hidden">
-                                        <table className="w-full text-sm text-center border-collapse">
-                                            <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
-                                                <tr>
-                                                    <th className="px-4 py-3 border-r border-slate-200 text-left">Month</th>
-                                                    <th className="px-4 py-3 border-r border-slate-200 w-32">C1</th>
-                                                    <th className="px-4 py-3 border-r border-slate-200 w-32">C2</th>
-                                                    <th className="px-4 py-3 border-r border-slate-200 w-32">C4</th>
-                                                    <th className="px-4 py-3 border-r border-slate-200 w-32">C5</th>
-                                                    <th className="px-4 py-3 w-32 bg-slate-200/50">Total</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-slate-100">
-                                                {unitAllocation.map((row, index) => {
-                                                    const rowTotal = (Number(row.c1) || 0) + (Number(row.c2) || 0) + (Number(row.c4) || 0) + (Number(row.c5) || 0);
-                                                    return (
-                                                        <tr key={row.month} className="hover:bg-slate-50">
-                                                            <td className="px-4 py-2 font-medium text-slate-900 border-r border-slate-100 text-left">{row.month}</td>
-                                                            <td className="px-2 py-2 border-r border-slate-100">
-                                                                <Input
-                                                                    type="number"
-                                                                    value={row.c1}
-                                                                    onChange={(e) => handleAllocationChange(index, 'c1', e.target.value)}
-                                                                    className="h-8 text-center text-xs"
-                                                                    disabled={isReadOnly}
-                                                                />
-                                                            </td>
-                                                            <td className="px-2 py-2 border-r border-slate-100">
-                                                                <Input
-                                                                    type="number"
-                                                                    value={row.c2}
-                                                                    onChange={(e) => handleAllocationChange(index, 'c2', e.target.value)}
-                                                                    className="h-8 text-center text-xs"
-                                                                    disabled={isReadOnly}
-                                                                />
-                                                            </td>
-                                                            <td className="px-2 py-2 border-r border-slate-100">
-                                                                <Input
-                                                                    type="number"
-                                                                    value={row.c4}
-                                                                    onChange={(e) => handleAllocationChange(index, 'c4', e.target.value)}
-                                                                    className="h-8 text-center text-xs"
-                                                                    disabled={isReadOnly}
-                                                                />
-                                                            </td>
-                                                            <td className="px-2 py-2 border-r border-slate-100">
-                                                                <Input
-                                                                    type="number"
-                                                                    value={row.c5}
-                                                                    onChange={(e) => handleAllocationChange(index, 'c5', e.target.value)}
-                                                                    className="h-8 text-center text-xs"
-                                                                    disabled={isReadOnly}
-                                                                />
-                                                            </td>
-                                                            <td className="px-4 py-2 font-bold text-slate-700 bg-slate-50/50">
-                                                                {rowTotal}
-                                                            </td>
-                                                        </tr>
-                                                    );
-                                                })}
-                                                <tr className="bg-slate-100 font-bold border-t border-slate-300">
-                                                    <td className="px-4 py-3 text-left">
-                                                        <span>Grand Total</span>
-                                                    </td>
-                                                    <td className="px-4 py-3">{unitAllocation.reduce((sum, row) => sum + (Number(row.c1) || 0), 0)}</td>
-                                                    <td className="px-4 py-3">{unitAllocation.reduce((sum, row) => sum + (Number(row.c2) || 0), 0)}</td>
-                                                    <td className="px-4 py-3">{unitAllocation.reduce((sum, row) => sum + (Number(row.c4) || 0), 0)}</td>
-                                                    <td className="px-4 py-3">{unitAllocation.reduce((sum, row) => sum + (Number(row.c5) || 0), 0)}</td>
-                                                    <td className="px-4 py-3 bg-slate-200">
-                                                        {unitAllocation.reduce((sum, row) => sum + (Number(row.c1) || 0) + (Number(row.c2) || 0) + (Number(row.c4) || 0) + (Number(row.c5) || 0), 0)}
-                                                    </td>
-                                                </tr>
-                                            </tbody>
-                                        </table>
-                                    </div>
+                                <div className="md:col-span-3 space-y-2">
+                                    <label className="text-sm font-semibold text-slate-700">Status</label>
+                                    <Select value={newSeStatus} onValueChange={setNewSeStatus} disabled={isReadOnly}>
+                                        <SelectTrigger className="bg-white border-slate-300 h-10 text-sm focus:ring-blue-500">
+                                            <SelectValue placeholder="Select Status" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="active">Active</SelectItem>
+                                            <SelectItem value="inactive">Inactive</SelectItem>
+                                        </SelectContent>
+                                    </Select>
                                 </div>
-                            </TabsContent>
-                        </div>
-                    </Tabs>
-                </div>
-            </div>
-
-            <Dialog open={!!viewFile} onOpenChange={(open) => !open && setViewFile(null)}>
-                <DialogContent className="max-w-4xl max-h-[90vh] overflow-auto">
-                    <DialogHeader>
-                        <DialogTitle>{viewFile?.name}</DialogTitle>
-                    </DialogHeader>
-                    <div className="flex items-center justify-center p-4">
-                        {viewFile?.file && viewFile.file.type.startsWith('image/') ? (
-                            <img
-                                src={URL.createObjectURL(viewFile.file)}
-                                alt={viewFile.name}
-                                className="max-w-full h-auto object-contain rounded-md"
-                            />
-                        ) : viewFile?.file && viewFile.file.type === 'application/pdf' ? (
-                            <iframe
-                                src={URL.createObjectURL(viewFile.file)}
-                                className="w-full h-[600px] border-none rounded-md"
-                                title={viewFile.name}
-                            />
-                        ) : (
-                            <div className="text-center py-10 text-slate-500">
-                                <p>File type not supported for preview.</p>
-                                <p className="text-sm mt-2">{viewFile?.file?.name}</p>
+                                <div className="md:col-span-12 space-y-2">
+                                    <label className="text-sm font-semibold text-slate-700">Remarks</label>
+                                    <Input
+                                        value={newSeRemarks}
+                                        onChange={(e) => setNewSeRemarks(e.target.value)}
+                                        placeholder="Enter Remarks"
+                                        maxLength={50}
+                                        className="bg-white border-slate-300 h-10 text-sm focus:ring-blue-500"
+                                        disabled={isReadOnly}
+                                    />
+                                    <div className="text-right text-xs text-slate-500">{newSeRemarks.length}/50</div>
+                                </div>
+                                <div className="md:col-span-12 flex justify-end pt-2">
+                                    <Button
+                                        onClick={handleAddSeNumber}
+                                        className={cn("bg-cyan-700 hover:bg-cyan-800 text-white gap-2", isPosted && "opacity-50 cursor-not-allowed")}
+                                        disabled={isReadOnly}
+                                    >
+                                        <UserPlus className="h-4 w-4" /> Add
+                                    </Button>
+                                </div>
                             </div>
-                        )}
-                    </div>
-                </DialogContent>
-            </Dialog>
+
+                            <div className="border border-slate-200 rounded-md overflow-hidden">
+                                <table className="w-full text-sm text-left border-collapse">
+                                    <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
+                                        <tr>
+                                            <th className="px-4 py-3 w-16 border-r border-slate-200">#</th>
+                                            <th className="px-4 py-3 border-r border-slate-200">SE Number</th>
+                                            <th className="px-4 py-3 border-r border-slate-200">KVA</th>
+                                            <th className="px-4 py-3 border-r border-slate-200">EDC Circle</th>
+                                            <th className="px-4 py-3 border-r border-slate-200">Remarks</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {seNumbers.length === 0 ? (
+                                            <tr>
+                                                <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
+                                                    No SE Numbers added yet.
+                                                </td>
+                                            </tr>
+                                        ) : (
+                                            seNumbers.map((item, index) => (
+                                                <tr key={item.id} className="hover:bg-slate-50">
+                                                    <td className="px-4 py-3 text-slate-500 border-r border-slate-100">{index + 1}</td>
+                                                    <td className="px-4 py-3 font-medium text-slate-900 border-r border-slate-100">
+                                                        {item.service_number ?? item.se_number ?? item.seNumber}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-slate-600 border-r border-slate-100">
+                                                        {/* @ts-ignore - kva from join or lookup */}
+                                                        {kvaList.find(k => String(k.id) === String(item.kva_id || item.kva))?.kva || kvaList.find(k => String(k.id) === String(item.kva_id || item.kva))?.capacity || item.kva_id || item.kva}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-slate-600 border-r border-slate-100">
+                                                        {edcList.find(e =>
+                                                            e.id.toString() === (
+                                                                item.edc_circle_id ?? item.edc_circle ?? item.edcCircle
+                                                            )?.toString()
+                                                        )?.edc_name ||
+                                                            edcList.find(e =>
+                                                                e.id.toString() === (
+                                                                    item.edc_circle_id ?? item.edc_circle ?? item.edcCircle
+                                                                )?.toString()
+                                                            )?.edc_circle ||
+                                                            item.edc_circle_id ||
+                                                            item.edc_circle ||
+                                                            item.edcCircle ||
+                                                            ""}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-slate-600 border-r border-slate-100">{item.remarks}</td>
+                                                    <td className="px-4 py-3 text-center flex justify-center gap-2">
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className={cn("h-8 w-8 text-blue-500 hover:bg-blue-50", isPosted && "opacity-50 cursor-not-allowed")}
+                                                            disabled={isReadOnly}
+                                                            onClick={() => {
+                                                                setEditSeId(item.id);
+                                                                setNewSeNumber(
+                                                                    (item.service_number ?? item.se_number ?? item.seNumber)?.toString() || ""
+                                                                );
+                                                                setNewKva((item.kva_id ?? item.kva)?.toString() || "");
+                                                                setNewEdcCircle(
+                                                                    (item.edc_circle_id ?? item.edc_circle ?? item.edcCircle)?.toString() || ""
+                                                                );
+                                                                setNewSeRemarks(item.remarks || "");
+                                                                setNewSeStatus(
+                                                                    item.status === 1 ||
+                                                                        item.status === "1" ||
+                                                                        item.status === "active"
+                                                                        ? "active"
+                                                                        : "inactive"
+                                                                );
+                                                            }}
+                                                        >
+                                                            <Edit className="h-4 w-4" />
+                                                        </Button>
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </TabsContent>
+
+                    <TabsContent value="contact_details" className="mt-0 space-y-6 pt-2">
+                        <div className="space-y-6 max-w-6xl">
+                            <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end bg-slate-50 p-4 rounded-lg border border-slate-200">
+                                <div className="md:col-span-4 space-y-2">
+                                    <label className="text-sm font-semibold text-slate-700">Contact Person</label>
+                                    <Input
+                                        value={newContactPerson}
+                                        onChange={(e) => setNewContactPerson(e.target.value)}
+                                        placeholder="Name"
+                                        className="bg-white border-slate-300 h-10 text-sm focus:ring-blue-500"
+                                        disabled={isReadOnly}
+                                    />
+                                </div>
+                                <div className="md:col-span-4 space-y-2">
+                                    <label className="text-sm font-semibold text-slate-700">Phone</label>
+                                    <Input
+                                        value={newContactNumber}
+                                        onChange={(e) => setNewContactNumber(e.target.value)}
+                                        placeholder="Phone Number"
+                                        className="bg-white border-slate-300 h-10 text-sm focus:ring-blue-500"
+                                        disabled={isReadOnly}
+                                    />
+                                </div>
+                                <div className="md:col-span-4">
+                                    <Button
+                                        onClick={handleAddContact}
+                                        className={cn("w-full bg-indigo-600 hover:bg-indigo-700 text-white h-10", isPosted && "opacity-50 cursor-not-allowed")}
+                                        disabled={isReadOnly}
+                                    >
+                                        <UserPlus className="h-4 w-4 mr-2" /> Add
+                                    </Button>
+                                </div>
+                            </div>
+
+                            <div className="border border-slate-200 rounded-md overflow-hidden">
+                                <table className="w-full text-sm text-left border-collapse">
+                                    <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
+                                        <tr>
+                                            <th className="px-4 py-3 w-16 border-r border-slate-200">#</th>
+                                            <th className="px-4 py-3 border-r border-slate-200">Person Name</th>
+                                            <th className="px-4 py-3 border-r border-slate-200">Phone</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {contacts.length === 0 ? (
+                                            <tr>
+                                                <td colSpan={3} className="px-4 py-8 text-center text-slate-500">
+                                                    No contacts added yet.
+                                                </td>
+                                            </tr>
+                                        ) : (
+                                            contacts.map((item, index) => (
+                                                <tr key={item.id} className="hover:bg-slate-50">
+                                                    <td className="px-4 py-3 text-slate-500 border-r border-slate-100">{index + 1}</td>
+                                                    <td className="px-4 py-3 font-medium text-slate-900 border-r border-slate-100">
+                                                        {item.person || item.contact_person || item.contact_person_name}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-slate-600 border-r border-slate-100">
+                                                        {item.number || item.phone || item.phone_number}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-center flex gap-2 justify-center">
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className={cn("h-8 w-8 text-blue-500 hover:bg-blue-50", isPosted && "opacity-50 cursor-not-allowed")}
+                                                            disabled={isReadOnly}
+                                                            onClick={() => {
+                                                                setNewContactPerson(
+                                                                    item.person || item.contact_person || item.contact_person_name || ""
+                                                                );
+                                                                setNewContactNumber(
+                                                                    item.number || item.phone || item.phone_number || ""
+                                                                );
+                                                                setEditContactId(item.id);
+                                                            }}
+                                                        >
+                                                            <Edit className="h-4 w-4" />
+                                                        </Button>
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </TabsContent>
+
+                    <TabsContent value="uploads" className="mt-0 space-y-6 pt-2">
+                        <div className="space-y-6 max-w-5xl">
+                            <div className="border border-slate-200 rounded-md overflow-hidden">
+                                <table className="w-full text-sm text-left border-collapse">
+                                    <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
+                                        <tr>
+                                            <th className="px-4 py-3 w-16 border-r border-slate-200">#</th>
+                                            <th className="px-4 py-3 border-r border-slate-200">Document Name</th>
+                                            <th className="px-4 py-3 border-r border-slate-200 w-1/3">Upload</th>
+                                            <th className="px-4 py-3 border-r border-slate-200 w-1/3">File Name</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {documents.map((item, index) => (
+                                            <tr key={item.id} className="hover:bg-slate-50">
+                                                <td className="px-4 py-3 text-slate-500 border-r border-slate-100">{index + 1}</td>
+                                                <td className="px-4 py-3 font-medium text-slate-900 border-r border-slate-100">{item.name}</td>
+                                                <td className="px-4 py-3 border-r border-slate-100">
+                                                    <Input
+                                                        type="file"
+                                                        onChange={(e) => handleFileChange(item.id, e.target.files ? e.target.files[0] : null)}
+                                                        className="bg-white border-slate-300 h-9 text-xs focus:ring-blue-500 file:mr-4 file:py-1 file:px-2 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100"
+                                                        disabled={isReadOnly}
+                                                    />
+                                                </td>
+                                                <td className="px-4 py-3 text-slate-600 border-r border-slate-100">
+                                                    {item.fileName ? (
+                                                        <a
+                                                            href={item.file ? URL.createObjectURL(item.file) : "#"}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
+                                                        >
+                                                            {item.fileName}
+                                                        </a>
+                                                    ) : (
+                                                        <span className="text-slate-400 italic">No file selected</span>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </TabsContent>
+
+                    <TabsContent value="agreed_units" className="mt-0 space-y-6 pt-2">
+                        <div className="space-y-6 max-w-5xl">
+                            <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                                <div className="flex flex-wrap gap-6">
+                                    <div className="space-y-2 max-w-xs">
+                                        <label className="text-sm font-semibold text-slate-700">Total Agreed Units</label>
+                                        <Input
+                                            type="number"
+                                            value={totalAgreedUnits}
+                                            onChange={(e) => setTotalAgreedUnits(e.target.value)}
+                                            className="bg-white border-slate-300 h-10 text-sm focus:ring-blue-500 w-48"
+                                            disabled={isReadOnly}
+                                        />
+                                    </div>
+                                    <div className="space-y-2 max-w-xs">
+                                        <label className="text-sm font-semibold text-slate-700">Rate per unit</label>
+                                        <Input
+                                            type="number"
+                                            value={ratePerUnit}
+                                            onChange={(e) => setRatePerUnit(e.target.value)}
+                                            placeholder="0.00"
+                                            step="0.01"
+                                            className="bg-white border-slate-300 h-10 text-sm focus:ring-blue-500 w-48"
+                                            disabled={isReadOnly}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="border border-slate-200 rounded-md overflow-hidden">
+                                <table className="w-full text-sm text-center border-collapse">
+                                    <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
+                                        <tr>
+                                            <th className="px-4 py-3 border-r border-slate-200 text-left">Month</th>
+                                            <th className="px-4 py-3 border-r border-slate-200 w-32">C1</th>
+                                            <th className="px-4 py-3 border-r border-slate-200 w-32">C2</th>
+                                            <th className="px-4 py-3 border-r border-slate-200 w-32">C4</th>
+                                            <th className="px-4 py-3 border-r border-slate-200 w-32">C5</th>
+                                            <th className="px-4 py-3 w-32 bg-slate-200/50">Total</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {unitAllocation.map((row, index) => {
+                                            const rowTotal = (Number(row.c1) || 0) + (Number(row.c2) || 0) + (Number(row.c4) || 0) + (Number(row.c5) || 0);
+                                            return (
+                                                <tr key={row.month} className="hover:bg-slate-50">
+                                                    <td className="px-4 py-2 font-medium text-slate-900 border-r border-slate-100 text-left">{row.month}</td>
+                                                    <td className="px-2 py-2 border-r border-slate-100">
+                                                        <Input
+                                                            type="number"
+                                                            value={row.c1}
+                                                            onChange={(e) => handleAllocationChange(index, 'c1', e.target.value)}
+                                                            className="h-8 text-center text-xs"
+                                                            disabled={isReadOnly}
+                                                        />
+                                                    </td>
+                                                    <td className="px-2 py-2 border-r border-slate-100">
+                                                        <Input
+                                                            type="number"
+                                                            value={row.c2}
+                                                            onChange={(e) => handleAllocationChange(index, 'c2', e.target.value)}
+                                                            className="h-8 text-center text-xs"
+                                                            disabled={isReadOnly}
+                                                        />
+                                                    </td>
+                                                    <td className="px-2 py-2 border-r border-slate-100">
+                                                        <Input
+                                                            type="number"
+                                                            value={row.c4}
+                                                            onChange={(e) => handleAllocationChange(index, 'c4', e.target.value)}
+                                                            className="h-8 text-center text-xs"
+                                                            disabled={isReadOnly}
+                                                        />
+                                                    </td>
+                                                    <td className="px-2 py-2 border-r border-slate-100">
+                                                        <Input
+                                                            type="number"
+                                                            value={row.c5}
+                                                            onChange={(e) => handleAllocationChange(index, 'c5', e.target.value)}
+                                                            className="h-8 text-center text-xs"
+                                                            disabled={isReadOnly}
+                                                        />
+                                                    </td>
+                                                    <td className="px-4 py-2 font-bold text-slate-700 bg-slate-50/50">
+                                                        {rowTotal}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                        <tr className="bg-slate-100 font-bold border-t border-slate-300">
+                                            <td className="px-4 py-3 text-left">
+                                                <span>Grand Total</span>
+                                            </td>
+                                            <td className="px-4 py-3">{unitAllocation.reduce((sum, row) => sum + (Number(row.c1) || 0), 0)}</td>
+                                            <td className="px-4 py-3">{unitAllocation.reduce((sum, row) => sum + (Number(row.c2) || 0), 0)}</td>
+                                            <td className="px-4 py-3">{unitAllocation.reduce((sum, row) => sum + (Number(row.c4) || 0), 0)}</td>
+                                            <td className="px-4 py-3">{unitAllocation.reduce((sum, row) => sum + (Number(row.c5) || 0), 0)}</td>
+                                            <td className="px-4 py-3 bg-slate-200">
+                                                {unitAllocation.reduce((sum, row) => sum + (Number(row.c1) || 0) + (Number(row.c2) || 0) + (Number(row.c4) || 0) + (Number(row.c5) || 0), 0)}
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </TabsContent>
+                </div>
+            </Tabs>
+        </div>
+            </div >
+
+        <Dialog open={!!viewFile} onOpenChange={(open) => !open && setViewFile(null)}>
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-auto">
+                <DialogHeader>
+                    <DialogTitle>{viewFile?.name}</DialogTitle>
+                </DialogHeader>
+                <div className="flex items-center justify-center p-4">
+                    {viewFile?.file && viewFile.file.type.startsWith('image/') ? (
+                        <img
+                            src={URL.createObjectURL(viewFile.file)}
+                            alt={viewFile.name}
+                            className="max-w-full h-auto object-contain rounded-md"
+                        />
+                    ) : viewFile?.file && viewFile.file.type === 'application/pdf' ? (
+                        <iframe
+                            src={URL.createObjectURL(viewFile.file)}
+                            className="w-full h-[600px] border-none rounded-md"
+                            title={viewFile.name}
+                        />
+                    ) : (
+                        <div className="text-center py-10 text-slate-500">
+                            <p>File type not supported for preview.</p>
+                            <p className="text-sm mt-2">{viewFile?.file?.name}</p>
+                        </div>
+                    )}
+                </div>
+            </DialogContent>
+        </Dialog>
 
 
 

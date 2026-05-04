@@ -41,7 +41,7 @@ import EBStatementSolarPdf from "./pages/eb_statement_solar/EBStatementSolarPdf"
 import BankReport from "./pages/report/Report";
 import ForecastReport from "./pages/forecast_report/ForecastReport";
 import BillingBankReport from "./pages/billing_report/BillingReport";
-import Invoice from "./pages/invoice/invoice";
+
 import EnergyReconcilation from "./pages/energy_reconcilation/EnergyReconcilation";
 import ConsumptionRequest from "./pages/consumption_request/ConsumptionRequest";
 import EnergyAllotment from "./pages/energy_allotment/EnergyAllotment";
@@ -170,7 +170,7 @@ const App = () => (
               <Route path="/consumption-bank-report" element={<Navigate to="/forecast-report" replace />} />
               <Route path="/forecast-report" element={<ForecastReport />} />
               <Route path="/billing-bank-report" element={<BillingBankReport />} />
-              <Route path="/invoice" element={<Invoice />} />
+
               <Route path="/reconcilation" element={<EnergyReconcilation />} />
               <Route path="/consumption-request" element={<ConsumptionRequest />} />
               <Route path="/energy-allotment" element={<EnergyAllotment />} />

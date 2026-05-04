@@ -311,8 +311,9 @@ export default function EBStatementSolarList() {
                                     <TableRow>
                                         <TableHead className="font-semibold text-white h-10 whitespace-nowrap w-1/6 pl-6">Year</TableHead>
                                         <TableHead className="font-semibold text-white h-10 whitespace-nowrap w-1/6">Month</TableHead>
-                                        <TableHead className="font-semibold text-white h-10 whitespace-nowrap w-1/6">Solar Number</TableHead>
-                                        <TableHead className="font-semibold text-white h-10 whitespace-nowrap text-center w-1/6">PDF</TableHead>
+                                        <TableHead className="font-semibold text-white h-10 whitespace-nowrap w-[12%]">Solar Number</TableHead>
+                                        <TableHead className="font-semibold text-white h-10 whitespace-nowrap w-1/6">Windmill Name</TableHead>
+                                        <TableHead className="font-semibold text-white h-10 whitespace-nowrap text-center w-[10%]">PDF</TableHead>
                                         <TableHead className="font-semibold text-white h-10 whitespace-nowrap w-1/6">Submitted Date and Time</TableHead>
                                         <TableHead className="font-semibold text-white h-10 whitespace-nowrap w-1/6">Submitted By</TableHead>
                                     </TableRow>
@@ -320,14 +321,14 @@ export default function EBStatementSolarList() {
                                 <TableBody>
                                     {rows.length === 0 && !loading && (
                                         <TableRow>
-                                            <TableCell colSpan={6} className="text-center py-4 text-slate-500">
+                                            <TableCell colSpan={7} className="text-center py-4 text-slate-500">
                                                 No EB Statement Solar records found
                                             </TableCell>
                                         </TableRow>
                                     )}
                                     {loading && (
                                         <TableRow>
-                                            <TableCell colSpan={6} className="text-center py-4 text-slate-500">
+                                            <TableCell colSpan={7} className="text-center py-4 text-slate-500">
                                                 Loading...
                                             </TableCell>
                                         </TableRow>
@@ -338,7 +339,8 @@ export default function EBStatementSolarList() {
                                                 {row.submitted_time ? format(new Date(row.submitted_time), "yyyy") : "-"}
                                             </TableCell>
                                             <TableCell className="py-2 text-sm w-1/6">{row.month || "-"}</TableCell>
-                                            <TableCell className="py-2 text-sm w-1/6">{row.solar_number || row.solar_id || "-"}</TableCell>
+                                            <TableCell className="py-2 text-sm w-[12%]">{row.solar_number || row.solar_id || "-"}</TableCell>
+                                            <TableCell className="py-2 text-sm w-1/6 font-semibold">{row.windmill_name || "N/A"}</TableCell>
                                             <TableCell className="py-2 text-center w-1/6">
                                                 {(() => {
                                                     const pdfPath = row.pdf_file_path || row.pdf || "";

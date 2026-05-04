@@ -4,9 +4,6 @@ import { ArrowLeft, Printer } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import api from "@/services/api";
 
-// ─────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────
 const ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
     "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen",
     "Seventeen", "Eighteen", "Nineteen"];
@@ -78,6 +75,23 @@ interface InvoiceData {
     charge_dsm: number;
     charge_wheeling: number;
     charge_tax: number;
+    // New fields
+    delivery_note?: string;
+    mode_terms_of_payment?: string;
+    reference_no_date?: string;
+    other_references?: string;
+    buyers_order_no?: string;
+    buyers_order_date?: string;
+    dispatch_doc_no?: string;
+    delivery_note_date?: string;
+    dispatched_through?: string;
+    destination?: string;
+    terms_of_delivery?: string;
+    details?: Array<{
+        field_name: string;
+        amount: number;
+        calculation?: string;
+    }>;
 }
 
 export default function ClientInvoicePdf() {
@@ -132,54 +146,60 @@ export default function ClientInvoicePdf() {
         );
     }
 
-    const dMap: Record<string, number> = {};
+    const dMap: Record<string, {amount: number, calculation?: string}> = {};
     if (invoice.details && Array.isArray(invoice.details)) {
-        invoice.details.forEach((d: any) => {
-            dMap[d.field_name] = Number(d.amount);
+        invoice.details.forEach((d) => {
+            dMap[d.field_name] = {
+                amount: Number(d.amount),
+                calculation: d.calculation
+            };
         });
     }
 
     const amount = Number(invoice.amount) || 0;
-    const generatedUnits = dMap["Units"] ?? (Number(invoice.generated_units) || 0);
-    const RATE_PER_UNIT = dMap["Rate"] ?? (Number(invoice.invoice_constant) || 6.80);
+    const generatedUnits = dMap["Units"]?.amount || (Number(invoice.generated_units) || 0);
+    const RATE_PER_UNIT = dMap["Rate"]?.amount || (Number(invoice.invoice_constant) || 6.80);
     const energyAmount = generatedUnits * RATE_PER_UNIT;
 
-    // Charges
-    const cMeter = dMap["Meter"] ?? (Number(invoice.charge_meter) || 0);
-    const cOM = dMap["O&M Charges"] ?? (Number(invoice.charge_om) || 0);
-    const cTrans = dMap["Transmsn Chrgs"] ?? (Number(invoice.charge_trans) || 0);
-    const cSysOpr = dMap["Sys Opr Chrgs"] ?? (Number(invoice.charge_sys_opr) || 0);
-    const cRkvah = dMap["RkvAh"] ?? (Number(invoice.charge_rkvah) || 0);
-    const cImport = dMap["Import Chrgs"] ?? (Number(invoice.charge_import) || 0);
-    const cSched = dMap["Scheduling chrgs"] ?? (Number(invoice.charge_scheduling) || 0);
-    const cDSM = dMap["DSM Charges"] ?? (Number(invoice.charge_dsm) || 0);
-    const cWheel = dMap["Wheeling"] ?? (Number(invoice.charge_wheeling) || 0);
-    const cTax = dMap["Selfenergy chrgs"] ?? (Number(invoice.charge_tax) || 0);
+    // Charges helper
+    const getCharge = (key: string, fallback: number): { amount: number; calculation?: string } => 
+        dMap[key] || { amount: fallback, calculation: undefined };
+
+    const cMeter = getCharge("Meter", Number(invoice.charge_meter) || 0);
+    const cOM = getCharge("O&M Charges", Number(invoice.charge_om) || 0);
+    const cTrans = getCharge("Transmsn Chrgs", Number(invoice.charge_trans) || 0);
+    const cSysOpr = getCharge("Sys Opr Chrgs", Number(invoice.charge_sys_opr) || 0);
+    const cRkvah = getCharge("RkvAh", Number(invoice.charge_rkvah) || 0);
+    const cImport = getCharge("Import Chrgs", Number(invoice.charge_import) || 0);
+    const cSched = getCharge("Scheduling chrgs", Number(invoice.charge_scheduling) || 0);
+    const cDSM = getCharge("DSM Charges", Number(invoice.charge_dsm) || 0);
+    const cWheel = getCharge("Wheeling", Number(invoice.charge_wheeling) || 0);
+    const cTax = getCharge("Selfenergy chrgs", Number(invoice.charge_tax) || 0);
 
     // Total charges to subtract
-    const totalCharges = cMeter + cOM + cTrans + cSysOpr + cRkvah + cImport + cSched + cDSM + cWheel + cTax;
+    const totalCharges = cMeter.amount + cOM.amount + cTrans.amount + cSysOpr.amount + cRkvah.amount + cImport.amount + cSched.amount + cDSM.amount + cWheel.amount + cTax.amount;
 
     const displayAmount = energyAmount - totalCharges;
     const absDisplayAmount = Math.abs(displayAmount);
     const displayAmountWords = numberToWords(Math.round(absDisplayAmount));
 
-    // Build description lines dynamically
+    // Build description lines dynamically with calculations for tooltips
     const descLines = [
-        `Generated Units for ${invoice.month} ${invoice.year} = ${generatedUnits.toFixed(2)}`,
-        `Net Units ${generatedUnits.toLocaleString("en-IN")} x Rs.${RATE_PER_UNIT.toFixed(2)} = Rs.${formatAmount(energyAmount)}`,
-        `For SC No.${invoice.service_number}`,
-        `(-) Meter = Rs.${formatAmount(cMeter)}`,
-        `(-) O&M Charges = Rs.${formatAmount(cOM)}`,
-        `(-) Transmsn Chrgs = Rs.${formatAmount(cTrans)}`,
-        `(-) Sys Opr Chrgs = Rs.${formatAmount(cSysOpr)}`,
-        `(-) RkvAh = Rs.${formatAmount(cRkvah)}`,
-        `(-) Import Chrgs = Rs.${formatAmount(cImport)}`,
-        `(-) Scheduling chrgs = Rs.${formatAmount(cSched)}`,
-        `(-) DSM Charges = Rs.${formatAmount(cDSM)}`,
-        `(-) Wheeling = Rs.${formatAmount(cWheel)}`,
-        `(-) Selfenergy chrgs = Rs.${formatAmount(cTax)}`,
-        `Total = Rs.${formatAmount(totalCharges)}`,
-        `Amount = Rs.${formatAmount(absDisplayAmount)}`,
+        { text: `Generated Units for ${invoice.month} ${invoice.year} = ${generatedUnits.toFixed(2)}`, calc: dMap["Units"]?.calculation },
+        { text: `Net Units ${generatedUnits.toLocaleString("en-IN")} x Rs.${RATE_PER_UNIT.toFixed(2)} = Rs.${formatAmount(energyAmount)}`, calc: dMap["Rate"]?.calculation },
+        { text: `For SC No.${invoice.service_number}`, calc: undefined },
+        { text: `(-) Meter = Rs.${formatAmount(cMeter.amount)}`, calc: cMeter.calculation },
+        { text: `(-) O&M Charges = Rs.${formatAmount(cOM.amount)}`, calc: cOM.calculation },
+        { text: `(-) Transmsn Chrgs = Rs.${formatAmount(cTrans.amount)}`, calc: cTrans.calculation },
+        { text: `(-) Sys Opr Chrgs = Rs.${formatAmount(cSysOpr.amount)}`, calc: cSysOpr.calculation },
+        { text: `(-) RkvAh = Rs.${formatAmount(cRkvah.amount)}`, calc: cRkvah.calculation },
+        { text: `(-) Import Chrgs = Rs.${formatAmount(cImport.amount)}`, calc: cImport.calculation },
+        { text: `(-) Scheduling chrgs = Rs.${formatAmount(cSched.amount)}`, calc: cSched.calculation },
+        { text: `(-) DSM Charges = Rs.${formatAmount(cDSM.amount)}`, calc: cDSM.calculation },
+        { text: `(-) Wheeling = Rs.${formatAmount(cWheel.amount)}`, calc: cWheel.calculation },
+        { text: `(-) Selfenergy chrgs = Rs.${formatAmount(cTax.amount)}`, calc: cTax.calculation },
+        { text: `Total = Rs.${formatAmount(totalCharges)}`, calc: dMap["Total"]?.calculation },
+        { text: `Amount = Rs.${formatAmount(absDisplayAmount)}`, calc: undefined },
     ];
 
     return (
@@ -257,59 +277,62 @@ export default function ClientInvoicePdf() {
                                     <tr className="border-b border-gray-400">
                                         <td className="px-1 pt-0.5 border-r border-gray-400 align-top">
                                             <div className="text-[9.5px] text-gray-600">Delivery Note</div>
+                                            <div className="font-bold">{invoice.delivery_note}</div>
                                         </td>
                                         <td className="px-1 pt-0.5 align-top">
                                             <div className="text-[9.5px] text-gray-600">Mode/Terms of Payment</div>
-                                            <div className="font-semibold">As Agreed</div>
+                                            <div className="font-semibold">{invoice.mode_terms_of_payment}</div>
                                         </td>
                                     </tr>
                                     {/* Row 3: Reference No. & Date | Other References */}
                                     <tr className="border-b border-gray-400">
                                         <td className="px-1 pt-0.5 border-r border-gray-400 align-top">
                                             <div className="text-[9.5px] text-gray-600">Reference No. &amp; Date.</div>
+                                            <div className="font-bold">{invoice.reference_no_date}</div>
                                         </td>
                                         <td className="px-1 pt-0.5 align-top">
                                             <div className="text-[9.5px] text-gray-600">Other References</div>
+                                            <div className="font-bold">{invoice.other_references}</div>
                                         </td>
                                     </tr>
                                     {/* Row 4: Buyer's Order No. | Dated */}
                                     <tr className="border-b border-gray-400">
                                         <td className="px-1 pt-0.5 border-r border-gray-400 align-top">
                                             <div className="text-[9.5px] text-gray-600">Buyer's Order No.</div>
-                                            <div className="h-3"></div>
+                                            <div className="font-bold">{invoice.buyers_order_no}</div>
                                         </td>
                                         <td className="px-1 pt-0.5 align-top">
                                             <div className="text-[9.5px] text-gray-600">Dated</div>
-                                            <div className="h-3"></div>
+                                            <div className="font-bold">{formatDate(invoice.buyers_order_date || "")}</div>
                                         </td>
                                     </tr>
                                     {/* Row 5: Dispatch Doc No. | Delivery Note Date */}
                                     <tr className="border-b border-gray-400">
                                         <td className="px-1 pt-0.5 border-r border-gray-400 align-top">
                                             <div className="text-[9.5px] text-gray-600">Dispatch Doc No.</div>
-                                            <div className="h-3"></div>
+                                            <div className="font-bold">{invoice.dispatch_doc_no}</div>
                                         </td>
                                         <td className="px-1 pt-0.5 align-top">
                                             <div className="text-[9.5px] text-gray-600">Delivery Note Date</div>
-                                            <div className="h-3"></div>
+                                            <div className="font-bold">{formatDate(invoice.delivery_note_date || "")}</div>
                                         </td>
                                     </tr>
                                     {/* Row 6: Dispatched through | Destination */}
                                     <tr className="border-b border-gray-400">
                                         <td className="px-1 pt-0.5 border-r border-gray-400 align-top">
                                             <div className="text-[9.5px] text-gray-600">Dispatched through</div>
-                                            <div className="h-3"></div>
+                                            <div className="font-bold">{invoice.dispatched_through}</div>
                                         </td>
                                         <td className="px-1 pt-0.5 align-top">
                                             <div className="text-[9.5px] text-gray-600">Destination</div>
-                                            <div className="h-3"></div>
+                                            <div className="font-bold">{invoice.destination}</div>
                                         </td>
                                     </tr>
                                     {/* Row 7: Terms of Delivery — full width */}
                                     <tr>
                                         <td colSpan={2} className="px-1 pt-0.5 pb-1">
                                             <div className="text-[9.5px] text-gray-600">Terms of Delivery</div>
-                                            <div className="h-3"></div>
+                                            <div className="font-bold">{invoice.terms_of_delivery}</div>
                                         </td>
                                     </tr>
                                 </tbody>
@@ -334,7 +357,7 @@ export default function ClientInvoicePdf() {
                                 <td className="border-r border-gray-400 p-1 align-top">
                                     <p className="font-bold">Electrical Energy Generated in Our Windmills</p>
                                     {descLines.map((line, i) => (
-                                        <p key={i} className="leading-4">{line}</p>
+                                        <p key={i} title={line.calc} className="leading-4 cursor-help">{line.text}</p>
                                     ))}
                                 </td>
                                 <td className="border-r border-gray-400 p-1 text-center align-top">

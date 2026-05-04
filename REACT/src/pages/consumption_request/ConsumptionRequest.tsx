@@ -99,24 +99,40 @@ export default function ConsumptionRequest() {
     }, [selectedYear, selectedMonth]);
 
     const handleFocus = (serviceId: number, field: string) => {
-        setDirtyFields(prev => ({ ...prev, [`${serviceId}-${field}`]: false }));
+        const idNum = Number(serviceId);
+        setDirtyFields(prev => ({ ...prev, [`${idNum}-${field}`]: false }));
+        // Strip commas for editing
+        setData(prevData => prevData.map(row =>
+            Number(row.service_id) === idNum 
+                ? { ...row, [field]: String(row[field] || "").replace(/,/g, '') } 
+                : row
+        ));
     };
 
     const handleValueChange = (serviceId: any, field: string, value: string) => {
-        // Allow numeric input with format: max 6 digits, 2 decimals (e.g., 999999.99)
-        if (value === '') {
+        // Strip commas before validation
+        const cleanValue = value.replace(/,/g, '');
+        
+        if (cleanValue === '') {
             const idNum = Number(serviceId);
             setData(prevData => prevData.map(row =>
-                Number(row.service_id) === idNum ? { ...row, [field]: value } : row
+                Number(row.service_id) === idNum ? { ...row, [field]: '' } : row
             ));
+            setDirtyFields(prev => ({ ...prev, [`${idNum}-${field}`]: true }));
+            setModifiedServiceIds(prev => {
+                const next = new Set(prev);
+                next.add(idNum);
+                return next;
+            });
             return;
         }
         
-        if (!/^\d{0,6}(\.\d{0,2})?$/.test(value)) return;
+        // Allow up to 10 digits before decimal
+        if (!/^\d{0,10}(\.\d{0,2})?$/.test(cleanValue)) return;
 
         const idNum = Number(serviceId);
         setData(prevData => prevData.map(row =>
-            Number(row.service_id) === idNum ? { ...row, [field]: value } : row
+            Number(row.service_id) === idNum ? { ...row, [field]: cleanValue } : row
         ));
         setDirtyFields(prev => ({ ...prev, [`${idNum}-${field}`]: true }));
         setModifiedServiceIds(prev => {
@@ -131,12 +147,22 @@ export default function ConsumptionRequest() {
         const key = `${idNum}-${field}`;
         if (!dirtyFields[key]) return; // Didn't change during this focus
 
-        if (!value || isNaN(Number(value))) return;
+        if (!value || isNaN(Number(value))) {
+            setData(prevData => prevData.map(row =>
+                Number(row.service_id) === idNum ? { ...row, [field]: "0" } : row
+            ));
+            setDirtyFields(prev => ({ ...prev, [key]: false }));
+            return;
+        }
 
-        const numValue = parseFloat(value);
+        const numValue = parseFloat(value.replace(/,/g, ''));
         const increasedValue = numValue * 1.08;
 
-        const formattedValue = increasedValue.toFixed(2).replace(/\.00$/, '');
+        // Format with commas (Indian format)
+        const formattedValue = increasedValue.toLocaleString("en-IN", {
+            maximumFractionDigits: 2,
+            minimumFractionDigits: 0
+        }).replace(/\.00$/, '');
 
         setData(prevData => prevData.map(row =>
             Number(row.service_id) === idNum ? { ...row, [field]: formattedValue } : row

@@ -101,7 +101,7 @@ def perform_charge_calculation(db: Session, windmill_id: int, month: int, year: 
             # C008 → manual/pending
             elif code == "C008":
                 value = cost
-                calc_str = "If anything pending"
+                calc_str = "Same as statement"
 
             # C010 → DSM charges
             elif code == "C010":
@@ -296,15 +296,15 @@ def compare_charges(eb_header_id: int, db: Session = Depends(get_db)):
             except Exception as e:
                 print(f"Error parsing PDF for comparison: {e}")
 
-        # 4. FORCE UPDATE IDs 5 and 6 in masters.charge_calculation if they exist in statement
-        for special_id in [5, 6]:
+        # 4. FORCE UPDATE IDs 5, 6 and 8 in masters.charge_calculation if they exist in statement
+        for special_id in [5, 6, 8]:
             if special_id in pdf_charges_map:
                 val = pdf_charges_map[special_id]
                 cursor.callproc("masters.sp_update_charge_calculation_value", (val, windmill_id, month_int, year_val, special_id))
                 while cursor.nextset(): pass
         conn.commit()
 
-        # 5. Get Calculated Charges (Including the forced overrides for 5 and 6)
+        # 5. Get Calculated Charges (Including the forced overrides for 5, 6 and 8)
         cursor.callproc("masters.sp_get_calculated_charges", (windmill_id, month_int, year_val))
         calc_results = cursor.fetchall()
         while cursor.nextset(): pass
@@ -341,7 +341,7 @@ def compare_charges(eb_header_id: int, db: Session = Depends(get_db)):
             name = names_map.get(cid, f"Charge {cid}")
             
             # Enforce rule: specific charges always match statement
-            if cid in [5, 6]:
+            if cid in [5, 6, 8]:
                 calc_val = stmt_val
 
             # Skip Wheeling Charges (C009), Self Generation Tax (C011), and C012 as requested

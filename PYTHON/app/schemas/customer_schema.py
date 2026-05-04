@@ -8,11 +8,11 @@ from datetime import datetime
 # ===============================
 class CustomerCreate(BaseModel):
     customer_name: str
-    city: str
-    phone_no: str
-    email: EmailStr
-    address: str
-    gst_number: str
+    city: Optional[str] = None
+    phone_no: Optional[str] = None
+    email: Optional[EmailStr] = None
+    address: Optional[str] = None
+    gst_number: Optional[str] = None
     status: Optional[int] = 1
     is_submitted: Optional[int] = 0
 
@@ -21,14 +21,14 @@ class CustomerCreate(BaseModel):
 # UPDATE CUSTOMER MODEL
 # ===============================
 class CustomerUpdate(BaseModel):
-    customer_name: str
-    city: str
-    phone_no: str
-    email: EmailStr
-    address: str
-    gst_number: str
-    status: Optional[int]
-    is_submitted: Optional[int]
+    customer_name: Optional[str] = None
+    city: Optional[str] = None
+    phone_no: Optional[str] = None
+    email: Optional[EmailStr] = None
+    address: Optional[str] = None
+    gst_number: Optional[str] = None
+    status: Optional[int] = None
+    is_submitted: Optional[int] = None
 
 
 # ===============================
@@ -37,11 +37,11 @@ class CustomerUpdate(BaseModel):
 class CustomerResponse(BaseModel):
     id: int
     customer_name: str
-    city: str
-    phone_no: str
-    email: str
-    address: str
-    gst_number: str
+    city: Optional[str] = None
+    phone_no: Optional[str] = None
+    email: Optional[str] = None
+    address: Optional[str] = None
+    gst_number: Optional[str] = None
     status: int
     created_by: Optional[int]
     created_at: Optional[datetime]
@@ -61,4 +61,5 @@ class AgreedUnitsRow(BaseModel):
 
 class AgreedUnitsRequest(BaseModel):
     total_agreed_units: Optional[str | int | float] = ""
+    rate_per_unit: Optional[str | int | float] = ""
     unit_allocation: List[AgreedUnitsRow]

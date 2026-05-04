@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import api from "@/services/api";
 import { useSidebar } from "@/components/ui/sidebar";
-import { Search, Edit, Eye } from "lucide-react";
+import { Search, Edit, Eye, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,6 +27,20 @@ import { utils, writeFile } from "xlsx";
 
 const allotmentData = [];
 
+const formatWithCommas = (val: string | number) => {
+    if (val === null || val === undefined || val === '') return '';
+    const s = val.toString().replace(/,/g, '');
+    if (isNaN(Number(s))) return s;
+    const parts = s.split('.');
+    const formattedInt = Number(parts[0]).toLocaleString('en-IN');
+    return parts.length > 1 ? `${formattedInt}.${parts[1]}` : formattedInt;
+};
+
+const stripCommas = (val: string | number) => {
+    if (val === null || val === undefined) return '';
+    return val.toString().replace(/,/g, '');
+};
+
 
 
 
@@ -43,32 +57,41 @@ type ChargeRow = {
 };
 
 type SolarRow = {
+    tempId: string;
     chargeKey: string;
-    chargeCode?: string;
+    chargeCode: string;
     chargeLabel: string;
     customer: string;
     seNumber: string;
     isChecked?: boolean;
-    value: number;
+    value: string | number;
+    systemValue: number;
 };
 
 
 
 const createInitialSolarRows = (labels: Record<string, string>): SolarRow[] => {
-    const chargeKeys = ['mrc', 'omc', 'trc', 'oc1', 'kp', 'ec', 'shc', 'other', 'dc'];
+    const chargeKeys = ['mrc', 'trc', 'oc1', 'kp', 'ec', 'shc', 'other', 'dc'];
+    const chargeCodes: Record<string, string> = {
+        mrc: 'C001', trc: 'C003', oc1: 'C004', kp: 'C005',
+        ec: 'C006', shc: 'C007', other: 'C008', dc: 'C010'
+    };
     return chargeKeys.map(key => ({
+        tempId: `${key}-${Math.random().toString(36).substring(2, 11)}`,
         chargeKey: key,
+        chargeCode: chargeCodes[key] || "",
         chargeLabel: labels[key] || key.toUpperCase(),
         customer: "",
         seNumber: "",
         isChecked: false,
-        value: 0
+        value: 0,
+        systemValue: 0
     }));
 };
 
 
 
-export default function EnergyAllotment() {
+function EnergyAllotment() {
     const { open } = useSidebar();
     const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString());
     const [selectedMonth, setSelectedMonth] = useState<string>((new Date().getMonth() + 1).toString());
@@ -82,6 +105,12 @@ export default function EnergyAllotment() {
     const [customerList, setCustomerList] = useState<string[]>([]);
     const [customerSEMap, setCustomerSEMap] = useState<Record<string, string[]>>({});
     const [fullCustomerData, setFullCustomerData] = useState<any[]>([]);
+    const [actualAdjustedTotals, setActualAdjustedTotals] = useState<Record<string, number>>({});
+
+    // Tracks per-partner borrows for each row+slot, keyed by "customer|seNumber|wm|slot".
+    // Value maps each partner slot (including "_own" for current slot) → { pp, bank } consumed.
+    const [borrowedAmounts, setBorrowedAmounts] = useState<Record<string, Record<string, { pp: number; bank: number }>>>({});
+
 
 
     // State for Uploads
@@ -90,16 +119,13 @@ export default function EnergyAllotment() {
     // Dynamic Charge Names from Master
     const [chargeLabels, setChargeLabels] = useState<Record<string, string>>({
         mrc: "M.R.C",
-        omc: "O.M.C",
         trc: "T.R.C",
         oc1: "O.C",
         kp: "K.P",
         ec: "E.C",
         shc: "S.H.C",
         other: "O.C",
-        dc: "D.C",
-        wc: "W.C",
-        sgt: "S.G.T"
+        dc: "D.C"
     });
 
     const handleFileUpload = async (wm: string, file: File | null) => {
@@ -258,95 +284,78 @@ export default function EnergyAllotment() {
     const [fetchedChargesSummary, setFetchedChargesSummary] = useState<Record<string, any>>({});
     const [chargeAllocationRows, setChargeAllocationRows] = useState<ChargeRow[]>([]);
 
-    useEffect(() => {
-        const fetchPreviousCharges = async () => {
-            if (!selectedMonth || !selectedYear || windmillNumbers.length === 0) return;
+    const reloadWindmillCharges = React.useCallback(async () => {
+        if (!selectedMonth || !selectedYear || windmillNumbers.length === 0) return;
 
-            setIsFetchingCharges(true);
-            try {
-                const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-                let mIdx = parseInt(selectedMonth) - 1;
-                let prevMIdx = mIdx - 1;
-                let prevYear = parseInt(selectedYear);
+        setIsFetchingCharges(true);
+        try {
+            const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+            let mIdx = parseInt(selectedMonth) - 1;
+            const currentMonthName = monthNames[mIdx];
+            const currentYear = parseInt(selectedYear);
 
-                if (prevMIdx < 0) {
-                    prevMIdx = 11;
-                    prevYear -= 1;
-                }
+            console.log(`🔍 Reloading Windmill Charges for ${currentYear}-${currentMonthName}...`);
 
-                const prevMonthName = monthNames[prevMIdx];
-                console.log(`🔍 Fetching Applicable Charges for PREVIOUS month ${prevYear}-${prevMonthName}...`);
+            const [applicableRes, savedRes] = await Promise.all([
+                api.get(`/eb/applicable-charges/summary?year=${currentYear}&month=${currentMonthName}`),
+                api.get(`/windmills/charge-allotment/all-by-month?year=${selectedYear}&month=${selectedMonth}`)
+            ]);
 
-                // Fetch both applicable charges and saved charges in parallel
-                const [applicableRes, savedRes] = await Promise.all([
-                    api.get(`/eb/applicable-charges/summary?year=${prevYear}&month=${prevMonthName}`),
-                    api.get(`/windmills/charge-allotment/all-by-month?year=${selectedYear}&month=${selectedMonth}`)
-                ]);
-
-                let chargesMap: Record<string, any> = {};
-                if (applicableRes.data && applicableRes.data.status === "success") {
-                    chargesMap = applicableRes.data.data;
-                    setFetchedChargesSummary(chargesMap);
-                }
-
-                let savedWindmills: any[] = [];
-                if (savedRes.data && savedRes.data.status === "success") {
-                    savedWindmills = savedRes.data.windmill_charges || [];
-                }
-
-                setChargeAllocationRows(windmillNumbers.map(wm => {
-                    const saved = savedWindmills.find((s: any) => String(s.windmill || '').trim() === String(wm).trim());
-                    if (saved) {
-                        return {
-                            windmill: wm,
-                            customer: String(saved.customer || "").trim(),
-                            seNumber: String(saved.seNumber || "").trim(),
-                            mrc: saved.mrc || 0,
-                            omc: saved.omc || 0,
-                            trc: saved.trc || 0,
-                            oc1: saved.oc1 || 0,
-                            kp: saved.kp || 0,
-                            ec: saved.ec || 0,
-                            shc: saved.shc || 0,
-                            other: saved.other || 0,
-                            dc: saved.dc || 0,
-                            wc: saved.wc || 0,
-                            sgt: saved.sgt || 0,
-                        };
-                    } else {
-                        const wmCharges = chargesMap[wm] || {};
-                        return {
-                            windmill: wm,
-                            customer: "",
-                            seNumber: "",
-                            mrc: wmCharges["C001"] || 0,
-                            omc: wmCharges["C002"] || 0,
-                            trc: wmCharges["C003"] || 0,
-                            oc1: wmCharges["C004"] || 0,
-                            kp: wmCharges["C005"] || 0,
-                            ec: wmCharges["C006"] || 0,
-                            shc: wmCharges["C007"] || 0,
-                            other: wmCharges["C008"] || 0,
-                            dc: wmCharges["C010"] || 0,
-                            wc: wmCharges["C009"] || 0,
-                            sgt: wmCharges["C011"] || 0,
-                        };
-                    }
-                }));
-
-            } catch (error) {
-                console.error("Error fetching previous month charges:", error);
-                setChargeAllocationRows(windmillNumbers.map(wm => ({
-                    windmill: wm, customer: "", seNumber: "",
-                    mrc: 0, omc: 0, trc: 0, oc1: 0, kp: 0, ec: 0, shc: 0, other: 0, dc: 0,
-                })));
-            } finally {
-                setIsFetchingCharges(false);
+            let chargesMap: Record<string, any> = {};
+            if (applicableRes.data && applicableRes.data.status === "success") {
+                chargesMap = applicableRes.data.data;
+                setFetchedChargesSummary(chargesMap);
             }
-        };
 
-        fetchPreviousCharges();
+            let savedWindmills: any[] = [];
+            if (savedRes.data && savedRes.data.status === "success") {
+                savedWindmills = savedRes.data.windmill_charges || [];
+            }
+
+            setChargeAllocationRows(windmillNumbers.map(wm => {
+                const saved = savedWindmills.find((s: any) => String(s.windmill || '').trim() === String(wm).trim());
+                if (saved) {
+                    return {
+                        windmill: wm,
+                        customer: String(saved.customer || "").trim(),
+                        seNumber: String(saved.seNumber || "").trim(),
+                        mrc: saved.mrc || 0,
+                        trc: saved.trc || 0,
+                        oc1: saved.oc1 || 0,
+                        kp: saved.kp || 0,
+                        ec: saved.ec || 0,
+                        shc: saved.shc || 0,
+                        other: saved.other || 0,
+                        dc: saved.dc || 0,
+                    };
+                } else {
+                    const wmCharges = chargesMap[wm] || {};
+                    return {
+                        windmill: wm,
+                        customer: "",
+                        seNumber: "",
+                        mrc: wmCharges["C001"] || 0,
+                        trc: wmCharges["C003"] || 0,
+                        oc1: wmCharges["C004"] || 0,
+                        kp: wmCharges["C005"] || 0,
+                        ec: wmCharges["C006"] || 0,
+                        shc: wmCharges["C007"] || 0,
+                        other: wmCharges["C008"] || 0,
+                        dc: wmCharges["C010"] || 0,
+                    };
+                }
+            }));
+
+        } catch (error) {
+            console.error("Error reloading windmill charges:", error);
+        } finally {
+            setIsFetchingCharges(false);
+        }
     }, [selectedYear, selectedMonth, windmillNumbers]);
+
+    useEffect(() => {
+        reloadWindmillCharges();
+    }, [reloadWindmillCharges]);
 
     // State for Solar Allocation
     const [solarAllocationRows, setSolarAllocationRows] = useState<SolarRow[]>(createInitialSolarRows(chargeLabels));
@@ -424,16 +433,13 @@ export default function EnergyAllotment() {
         };
         fetchSolarWindmills();
     }, []);
-
     useEffect(() => {
         const fetchConsumption = async () => {
             try {
                 const currentMonth = parseInt(selectedMonth);
                 const currentYear = parseInt(selectedYear);
-
                 console.log(`🔍 Fetching consumption requests for month ${currentYear}-${currentMonth}...`);
                 const response = await api.get(`/consumption-request/list?year=${currentYear}&month=${currentMonth}`);
-
                 if (Array.isArray(response.data)) {
                     setConsumptionRequests(response.data);
                 }
@@ -441,22 +447,18 @@ export default function EnergyAllotment() {
                 console.error("Error fetching consumption requests:", error);
             }
         };
-
         fetchConsumption();
     }, [selectedYear, selectedMonth]);
 
+    // Fetch charge labels once on mount
     useEffect(() => {
-        const loadAllSolarData = async () => {
-            // 1. Fetch labels first
-            let currentLabels = { ...chargeLabels };
-            let fullChargeList: any[] = [];
+        const fetchLabels = async () => {
             try {
                 const labelRes = await api.get("/consumption/list");
                 if (Array.isArray(labelRes.data)) {
-                    fullChargeList = labelRes.data;
+                    const currentLabels = { ...chargeLabels };
                     labelRes.data.forEach((item: any) => {
                         if (item.charge_code === 'C001') currentLabels.mrc = item.charge_name;
-                        if (item.charge_code === 'C002') currentLabels.omc = item.charge_name;
                         if (item.charge_code === 'C003') currentLabels.trc = item.charge_name;
                         if (item.charge_code === 'C004') currentLabels.oc1 = item.charge_name;
                         if (item.charge_code === 'C005') currentLabels.kp = item.charge_name;
@@ -464,131 +466,174 @@ export default function EnergyAllotment() {
                         if (item.charge_code === 'C007') currentLabels.shc = item.charge_name;
                         if (item.charge_code === 'C008') currentLabels.other = item.charge_name;
                         if (item.charge_code === 'C010') currentLabels.dc = item.charge_name;
-                        if (item.charge_code === 'C009') currentLabels.wc = item.charge_name;
-                        if (item.charge_code === 'C011') currentLabels.sgt = item.charge_name;
                     });
                     setChargeLabels(currentLabels);
                 }
             } catch (err) {
                 console.error("Error loading charge labels:", err);
             }
-
-            // 2. Fetch charges for the previous month
-            if (solarWindmills.length === 0) {
-                setSolarAllocationRows(createInitialSolarRows(currentLabels));
-                return;
-            }
-
-            try {
-                let prevMonthNum = parseInt(selectedMonth) - 1;
-                let prevYear = parseInt(selectedYear);
-                if (prevMonthNum === 0) {
-                    prevMonthNum = 12;
-                    prevYear -= 1;
-                }
-
-                console.log(`🔍 Solar Sync: Fetching charges for ${prevYear}-${prevMonthNum}`);
-                const [chargeRes, savedRes] = await Promise.all([
-                    api.get(`/eb-solar/applicable-charges/summary?year=${prevYear}&month=${prevMonthNum}`),
-                    api.get(`/windmills/charge-allotment/all-by-month?year=${selectedYear}&month=${selectedMonth}`)
-                ]);
-
-                console.log("🔍 Solar Sync API Response:", chargeRes.data);
-
-                let savedSolar: any[] = [];
-                if (savedRes.data && savedRes.data.status === "success") {
-                    savedSolar = savedRes.data.solar_charges || [];
-                }
-
-                if (chargeRes.data && chargeRes.data.status === "success") {
-                    const dataMap = chargeRes.data.data || {};
-                    const solarWmRaw = solarWindmills[0]?.solar_number || "";
-                    const solarWm = String(solarWmRaw).trim();
-
-                    console.log(`🔍 Solar Sync: Looking for windmill "${solarWm}" (raw: "${solarWmRaw}")`);
-                    console.log(`🔍 Solar Sync: Available keys in dataMap:`, Object.keys(dataMap));
-
-                    // Create a trimmed version of dataMap for robust matching
-                    const trimmedDataMap: Record<string, any> = {};
-                    Object.keys(dataMap).forEach(k => {
-                        trimmedDataMap[String(k).trim()] = dataMap[k];
-                    });
-
-                    const wmCharges = trimmedDataMap[solarWm] || {};
-                    console.log(`🔍 Solar Sync: Found charges for ${solarWm}:`, wmCharges);
-
-                    let dynamicRows: SolarRow[] = [];
-                    fullChargeList.forEach(charge => {
-                        const code = charge.charge_code;
-                        const label = charge.charge_name;
-
-                        let chargeKey = code.toLowerCase();
-                        if (code === 'C001') chargeKey = 'mrc';
-                        else if (code === 'C002') chargeKey = 'omc';
-                        else if (code === 'C003') chargeKey = 'trc';
-                        else if (code === 'C004') chargeKey = 'oc1';
-                        else if (code === 'C005') chargeKey = 'kp';
-                        else if (code === 'C006') chargeKey = 'ec';
-                        else if (code === 'C007') chargeKey = 'shc';
-                        else if (code === 'C008') chargeKey = 'other';
-                        else if (code === 'C010') chargeKey = 'dc';
-
-                        const savedRow = savedSolar.find((s: any) => s.charge_code === code);
-                        const val = wmCharges[code] || 0;
-
-                        if (val > 0 || (savedRow && savedRow.value > 0)) {
-                            dynamicRows.push({
-                                chargeKey: chargeKey,
-                                chargeCode: code,
-                                chargeLabel: label,
-                                customer: savedRow ? String(savedRow.customer || "").trim() : "",
-                                seNumber: savedRow ? String(savedRow.seNumber || "").trim() : "",
-                                value: savedRow?.value || val,
-                                isChecked: true
-                            });
-                        }
-                    });
-                    setSolarAllocationRows(dynamicRows);
-                } else {
-                    let fallbackRows: SolarRow[] = [];
-                    fullChargeList.forEach(charge => {
-                        const code = charge.charge_code;
-                        const label = charge.charge_name;
-
-                        let chargeKey = code.toLowerCase();
-                        if (code === 'C001') chargeKey = 'mrc';
-                        else if (code === 'C002') chargeKey = 'omc';
-                        else if (code === 'C003') chargeKey = 'trc';
-                        else if (code === 'C004') chargeKey = 'oc1';
-                        else if (code === 'C005') chargeKey = 'kp';
-                        else if (code === 'C006') chargeKey = 'ec';
-                        else if (code === 'C007') chargeKey = 'shc';
-                        else if (code === 'C008') chargeKey = 'other';
-                        else if (code === 'C010') chargeKey = 'dc';
-
-                        const savedRow = savedSolar.find((s: any) => s.charge_code === code);
-                        if (savedRow && savedRow.value > 0) {
-                            fallbackRows.push({
-                                chargeKey: chargeKey,
-                                chargeCode: code,
-                                chargeLabel: label,
-                                customer: savedRow ? String(savedRow.customer || "").trim() : "",
-                                seNumber: savedRow ? String(savedRow.seNumber || "").trim() : "",
-                                value: savedRow.value || 0,
-                                isChecked: true
-                            });
-                        }
-                    });
-                    setSolarAllocationRows(fallbackRows);
-                }
-            } catch (error) {
-                console.error("Error fetching solar charges:", error);
-                setSolarAllocationRows([]);
-            }
         };
+        fetchLabels();
+    }, []);
 
-        loadAllSolarData();
+    const reloadSolarCharges = React.useCallback(async () => {
+        if (!selectedYear || !selectedMonth) return;
+
+        // 2. Fetch charges for the previous month
+        if (solarWindmills.length === 0) {
+            setSolarAllocationRows(createInitialSolarRows(chargeLabels));
+            return;
+        }
+
+        try {
+            const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+            let mIdx = parseInt(selectedMonth) - 1;
+            const currentMonthName = monthNames[mIdx];
+            const currentYear = parseInt(selectedYear);
+
+            console.log(`🔍 Solar Sync: Fetching charges for ${currentYear}-${currentMonthName}`);
+            const [chargeRes, savedRes] = await Promise.all([
+                api.get(`/eb-solar/applicable-charges/summary?year=${currentYear}&month=${currentMonthName}`),
+                api.get(`/windmills/charge-allotment/all-by-month?year=${selectedYear}&month=${selectedMonth}`)
+            ]);
+
+            console.log("🔍 Solar Sync API Response:", chargeRes.data);
+
+            let savedSolar: any[] = [];
+            if (savedRes.data && savedRes.data.status === "success") {
+                savedSolar = savedRes.data.solar_charges || [];
+            }
+
+            if (chargeRes.data && chargeRes.data.status === "success") {
+                const dataMap = chargeRes.data.data || {};
+                const solarWmRaw = solarWindmills[0]?.solar_number || "";
+                const solarWm = String(solarWmRaw).trim();
+
+                console.log(`🔍 Solar Sync: Looking for windmill "${solarWm}" (raw: "${solarWmRaw}")`);
+                console.log(`🔍 Solar Sync: Available keys in dataMap:`, Object.keys(dataMap));
+
+                // Create a trimmed version of dataMap for robust matching
+                const trimmedDataMap: Record<string, any> = {};
+                Object.keys(dataMap).forEach(k => {
+                    trimmedDataMap[String(k).trim()] = dataMap[k];
+                });
+
+                const wmCharges = trimmedDataMap[solarWm] || {};
+                console.log(`🔍 Solar Sync: Found charges for ${solarWm}:`, wmCharges);
+
+                let dynamicRows: SolarRow[] = [];
+                const excludedCodes = ['C002', 'C009', 'C011'];
+                const chargesToProcess = [
+                    { charge_code: 'C001', charge_name: chargeLabels.mrc },
+                    { charge_code: 'C003', charge_name: chargeLabels.trc },
+                    { charge_code: 'C004', charge_name: chargeLabels.oc1 },
+                    { charge_code: 'C005', charge_name: chargeLabels.kp },
+                    { charge_code: 'C006', charge_name: chargeLabels.ec },
+                    { charge_code: 'C007', charge_name: chargeLabels.shc },
+                    { charge_code: 'C008', charge_name: chargeLabels.other },
+                    { charge_code: 'C010', charge_name: chargeLabels.dc }
+                ].filter(c => !excludedCodes.includes(c.charge_code));
+
+                chargesToProcess.forEach(charge => {
+                    const code = charge.charge_code;
+                    if (!code) return;
+                    const label = charge.charge_name || code;
+
+                    let chargeKey = code.toLowerCase();
+                    if (code === 'C001') chargeKey = 'mrc';
+                    else if (code === 'C003') chargeKey = 'trc';
+                    else if (code === 'C004') chargeKey = 'oc1';
+                    else if (code === 'C005') chargeKey = 'kp';
+                    else if (code === 'C006') chargeKey = 'ec';
+                    else if (code === 'C007') chargeKey = 'shc';
+                    else if (code === 'C008') chargeKey = 'other';
+                    else if (code === 'C010') chargeKey = 'dc';
+
+                    const savedRows = savedSolar.filter((s: any) => s.charge_code === code);
+                    const systemVal = wmCharges[code] || 0;
+
+                    if (savedRows.length > 0) {
+                        savedRows.forEach((savedRow: any) => {
+                            dynamicRows.push({
+                                tempId: `${code}-${Math.random().toString(36).substring(2, 11)}`,
+                                chargeKey: chargeKey,
+                                chargeCode: code,
+                                chargeLabel: label,
+                                customer: String(savedRow.customer || "").trim(),
+                                seNumber: String(savedRow.seNumber || "").trim(),
+                                value: savedRow.value || 0,
+                                systemValue: systemVal || savedRow.system_value || 0,
+                                isChecked: true
+                            });
+                        });
+                    } else if (systemVal > 0) {
+                        // Only add if systemVal > 0 if there are no saved rows
+                        dynamicRows.push({
+                            tempId: `${code}-${Math.random().toString(36).substring(2, 11)}`,
+                            chargeKey: chargeKey,
+                            chargeCode: code,
+                            chargeLabel: label,
+                            customer: "",
+                            seNumber: "",
+                            value: 0,
+                            systemValue: systemVal,
+                            isChecked: true
+                        });
+                    }
+                });
+                setSolarAllocationRows(dynamicRows);
+            } else {
+                let fallbackRows: SolarRow[] = [];
+                const excludedCodes = ['C002', 'C009', 'C011'];
+                const chargesToProcess = (fullChargeList.length > 0 ? fullChargeList : []).filter(c => !excludedCodes.includes(c.charge_code));
+                chargesToProcess.forEach(charge => {
+                    const code = charge.charge_code;
+                    if (!code) return;
+                    const label = charge.charge_name || code;
+
+                    let chargeKey = code.toLowerCase();
+                    if (code === 'C001') chargeKey = 'mrc';
+                    else if (code === 'C003') chargeKey = 'trc';
+                    else if (code === 'C004') chargeKey = 'oc1';
+                    else if (code === 'C005') chargeKey = 'kp';
+                    else if (code === 'C006') chargeKey = 'ec';
+                    else if (code === 'C007') chargeKey = 'shc';
+                    else if (code === 'C008') chargeKey = 'other';
+                    else if (code === 'C010') chargeKey = 'dc';
+
+                    const savedRows = savedSolar.filter((s: any) => s.charge_code === code);
+                    if (savedRows.length > 0) {
+                        savedRows.forEach((savedRow: any) => {
+                            fallbackRows.push({
+                                tempId: `${code}-${Math.random().toString(36).substring(2, 11)}`,
+                                chargeKey: chargeKey,
+                                chargeCode: code,
+                                chargeLabel: label,
+                                customer: String(savedRow.customer || "").trim(),
+                                seNumber: String(savedRow.seNumber || "").trim(),
+                                value: savedRow.value || 0,
+                                systemValue: 0,
+                                isChecked: true
+                            });
+                        });
+                    }
+                });
+
+                if (fallbackRows.length > 0) {
+                    setSolarAllocationRows(fallbackRows);
+                } else {
+                    setSolarAllocationRows(createInitialSolarRows(chargeLabels));
+                }
+            }
+        } catch (error) {
+            console.error("Error fetching solar charges:", error);
+            setSolarAllocationRows(createInitialSolarRows(chargeLabels));
+        }
     }, [selectedYear, selectedMonth, solarWindmills]);
+
+    useEffect(() => {
+        reloadSolarCharges();
+    }, [reloadSolarCharges]);
 
     useEffect(() => {
         const fetchCustomers = async () => {
@@ -615,21 +660,14 @@ export default function EnergyAllotment() {
 
                     // Create formatted data
                     const formattedData = response.data.map((item, idx) => {
-                        // The API may return the PK as 'id', 'customer_id', 'cust_id', etc.
                         const customerId = item.id || item.customer_id || item.cust_id || item.mc_id || 0;
-
-                        if (!customerId || customerId === 0) {
-                            console.warn(`⚠️  Row ${idx}: No customer ID for ${item.customer_name} — raw item keys:`, Object.keys(item), '| values:', item);
-                        } else {
-                            console.log(`✅ Row ${idx}: ${item.customer_name} → customer_id=${customerId}`);
-                        }
-
                         return {
                             customer_id: customerId,
                             service_id: item.service_id || 0,
                             wm: "",
                             customer: item.customer_name || item.customer,
                             seNumber: item.service_number || item.sc_number || '',
+                            totalAgreedUnits: item.total_agreed_units || 0,
                             consumption: "0",
                             c1: "0", c1_pp: "0", c1_bank: "0",
                             c2: "0", c2_pp: "0", c2_bank: "0",
@@ -708,6 +746,19 @@ export default function EnergyAllotment() {
         setIsEditing(!isEditing);
     };
 
+    // C1↔C2 mutual borrowing; C5 can borrow from C4; C1,C2,C4 cannot borrow from C5.
+    const PARTNER_SLOT: Record<string, string> = { c1: 'c2', c2: 'c1', c5: 'c4' };
+
+    const canBorrowFrom = (col: string, partner: string): boolean => {
+        // Explicitly block C4 borrowing from C5
+        if (col === 'c4' && partner === 'c5') return false;
+        return !!PARTNER_SLOT[col];
+    };
+
+    const isPartnered = (col: string): boolean => {
+        return col === 'c1' || col === 'c2' || col === 'c4' || col === 'c5';
+    };
+
     const fetchEbStatementSummary = async () => {
         try {
             console.log(`🔍 Fetching EB Statement P/B values for allotment month ${selectedYear}-${selectedMonth}...`);
@@ -728,87 +779,113 @@ export default function EnergyAllotment() {
         fetchEbStatementSummary();
     }, [selectedYear, selectedMonth]);
 
-    useEffect(() => {
-        if (!selectedYear || !selectedMonth) return;
+    const autoLoadAllAllotments = React.useCallback(async () => {
+        if (!selectedYear || !selectedMonth || !fullCustomerData || fullCustomerData.length === 0) return;
+        try {
+            const response = await api.get(
+                `/windmills/energy-allotment/all-by-month?year=${selectedYear}&month=${selectedMonth}`
+            );
 
-        const autoLoadAllAllotments = async () => {
-            try {
-                const response = await api.get(
-                    `/windmills/energy-allotment/all-by-month?year=${selectedYear}&month=${selectedMonth}`
-                );
+            if (response.data && response.data.status === "success") {
+                const savedData: any[] = response.data.data;
 
-                if (response.data && response.data.status === "success") {
-                    const savedData: any[] = response.data.data;
-                    setEnergyAllotmentData(prev => {
-                        // 1. Create a skeleton of unique (Customer, SE) from the current state
-                        const skeletonMap = new Map();
-                        prev.forEach(d => {
-                            const cid = d.customer_id || 0;
-                            const sid = d.service_id || 0;
-                            const key = `${cid}-${sid}`;
-                            if (!skeletonMap.has(key)) {
-                                skeletonMap.set(key, {
-                                    ...d,
-                                    wm: "",
-                                    c1: "0", c1_pp: "0", c1_bank: "0", c1_allot: "0",
-                                    c2: "0", c2_pp: "0", c2_bank: "0", c2_allot: "0",
-                                    c4: "0", c4_pp: "0", c4_bank: "0", c4_allot: "0",
-                                    c5: "0", c5_pp: "0", c5_bank: "0", c5_allot: "0",
-                                });
-                            }
-                        });
+                // ALWAYS build a fresh skeleton from fullCustomerData when period changes
+                const skeletonMap = new Map();
+                const baseData = fullCustomerData.map(item => {
+                    const customerId = item.id || item.customer_id || item.cust_id || item.mc_id || 0;
+                    return {
+                        customer_id: customerId,
+                        service_id: item.service_id || 0,
+                        wm: "",
+                        customer: item.customer_name || item.customer,
+                        seNumber: item.service_number || item.sc_number || '',
+                        totalAgreedUnits: item.total_agreed_units || 0,
+                        consumption: "0",
+                        c1: "0", c1_pp: "0", c1_bank: "0",
+                        c2: "0", c2_pp: "0", c2_bank: "0",
+                        c4: "0", c4_pp: "0", c4_bank: "0",
+                        c5: "0", c5_pp: "0", c5_bank: "0",
+                        c1_allot: "0", c2_allot: "0", c4_allot: "0", c5_allot: "0"
+                    };
+                });
 
-                        const resultRows: any[] = Array.from(skeletonMap.values());
-                        if (savedData.length === 0) return resultRows;
+                baseData.forEach(d => {
+                    const key = `${d.customer_id}-${d.service_id}`;
+                    if (!skeletonMap.has(key)) {
+                        skeletonMap.set(key, { ...d });
+                    }
+                });
 
-                        // 2. Distribute savedData into the skeleton
-                        savedData.forEach((s: any) => {
-                            const cid = s.customer_id || 0;
-                            const sid = s.service_id || 0;
-                            const key = `${cid}-${sid}`;
-                            const wm = String(s.windmill_number || '').trim();
+                let resultRows: any[] = Array.from(skeletonMap.values());
 
-                            // Try to find a row for this customer that hasn't been assigned a windmill yet
-                            const emptyIdx = resultRows.findIndex(r =>
-                                String(`${r.customer_id || 0}-${r.service_id || 0}`) === key && r.wm === ""
-                            );
+                if (savedData.length > 0) {
+                    savedData.forEach((s: any) => {
+                        const cid = s.customer_id || 0;
+                        const sid = s.service_id || 0;
+                        const key = `${cid}-${sid}`;
+                        const wm = String(s.windmill_number || '').trim();
 
-                            if (emptyIdx >= 0) {
-                                // Update the empty skeleton row
-                                resultRows[emptyIdx] = {
-                                    ...resultRows[emptyIdx],
+                        const emptyIdx = resultRows.findIndex(r =>
+                            String(`${r.customer_id || 0}-${r.service_id || 0}`) === key && r.wm === ""
+                        );
+
+                        if (emptyIdx >= 0) {
+                            resultRows[emptyIdx] = {
+                                ...resultRows[emptyIdx],
+                                wm: wm,
+                                c1: String(s.c1 || '0'), c1_pp: String(s.c1_pp || '0'), c1_bank: String(s.c1_bank || '0'), c1_allot: String(s.c1 || '0'),
+                                c2: String(s.c2 || '0'), c2_pp: String(s.c2_pp || '0'), c2_bank: String(s.c2_bank || '0'), c2_allot: String(s.c2 || '0'),
+                                c4: String(s.c4 || '0'), c4_pp: String(s.c4_pp || '0'), c4_bank: String(s.c4_bank || '0'), c4_allot: String(s.c4 || '0'),
+                                c5: String(s.c5 || '0'), c5_pp: String(s.c5_pp || '0'), c5_bank: String(s.c5_bank || '0'), c5_allot: String(s.c5 || '0'),
+                            };
+                        } else {
+                            const base = resultRows.find(r => String(`${r.customer_id || 0}-${r.service_id || 0}`) === key);
+                            if (base) {
+                                resultRows.push({
+                                    ...base,
                                     wm: wm,
                                     c1: String(s.c1 || '0'), c1_pp: String(s.c1_pp || '0'), c1_bank: String(s.c1_bank || '0'), c1_allot: String(s.c1 || '0'),
                                     c2: String(s.c2 || '0'), c2_pp: String(s.c2_pp || '0'), c2_bank: String(s.c2_bank || '0'), c2_allot: String(s.c2 || '0'),
                                     c4: String(s.c4 || '0'), c4_pp: String(s.c4_pp || '0'), c4_bank: String(s.c4_bank || '0'), c4_allot: String(s.c4 || '0'),
                                     c5: String(s.c5 || '0'), c5_pp: String(s.c5_pp || '0'), c5_bank: String(s.c5_bank || '0'), c5_allot: String(s.c5 || '0'),
-                                };
-                            } else {
-                                // If already assigned, clone the customer's base row and append for the additional windmill
-                                const base = resultRows.find(r => String(`${r.customer_id || 0}-${r.service_id || 0}`) === key);
-                                if (base) {
-                                    resultRows.push({
-                                        ...base,
-                                        wm: wm,
-                                        c1: String(s.c1 || '0'), c1_pp: String(s.c1_pp || '0'), c1_bank: String(s.c1_bank || '0'), c1_allot: String(s.c1 || '0'),
-                                        c2: String(s.c2 || '0'), c2_pp: String(s.c2_pp || '0'), c2_bank: String(s.c2_bank || '0'), c2_allot: String(s.c2 || '0'),
-                                        c4: String(s.c4 || '0'), c4_pp: String(s.c4_pp || '0'), c4_bank: String(s.c4_bank || '0'), c4_allot: String(s.c4 || '0'),
-                                        c5: String(s.c5 || '0'), c5_pp: String(s.c5_pp || '0'), c5_bank: String(s.c5_bank || '0'), c5_allot: String(s.c5 || '0'),
-                                    });
-                                }
+                                });
                             }
-                        });
-                        return resultRows;
+                        }
                     });
+                }
 
-                    console.log(`✅ Auto-loaded ${savedData.length} allotment rows for ${selectedMonth}/${selectedYear}`);
+                setEnergyAllotmentData(resultRows);
+                console.log(`✅ Auto-loaded ${savedData.length} allotment rows for ${selectedMonth}/${selectedYear}`);
+            }
+        } catch (error) {
+            console.error("❌ Auto-load allotments error:", error);
+        }
+    }, [selectedYear, selectedMonth, fullCustomerData]);
+
+    useEffect(() => {
+        autoLoadAllAllotments();
+    }, [autoLoadAllAllotments]);
+
+    useEffect(() => {
+        const fetchActualAdjustedTotals = async () => {
+            if (!selectedYear || !selectedMonth) return;
+            try {
+                const response = await api.get(`/actuals/list?year=${selectedYear}&month=${selectedMonth}`);
+                if (Array.isArray(response.data)) {
+                    const aggregation: Record<string, number> = {};
+                    response.data.forEach((item: any) => {
+                        const name = String(item.customer_name || '').trim();
+                        if (name) {
+                            aggregation[name] = (aggregation[name] || 0) + (parseFloat(item.manual_adjusted_total) || 0);
+                        }
+                    });
+                    setActualAdjustedTotals(aggregation);
                 }
             } catch (error) {
-                console.error("❌ Auto-load allotments error:", error);
+                console.error("Error fetching actual adjusted totals:", error);
             }
         };
-
-        autoLoadAllAllotments();
+        fetchActualAdjustedTotals();
     }, [selectedYear, selectedMonth]);
 
     const handleSearch = async () => {
@@ -1020,7 +1097,20 @@ export default function EnergyAllotment() {
             }
 
             if (activeTab === "list") {
-                const runningBalance = JSON.parse(JSON.stringify(ebSummaryData));
+                // Fetch FRESH server-side EB summary so the save's borrowing logic
+                // starts from the original pool — not the UI-deducted header values
+                // shown to the user while entering allocations.
+                let freshEbSummary = ebSummaryData;
+                try {
+                    const freshRes = await api.get(`/eb/summary/by-month?year=${selectedYear}&month=${selectedMonth}`);
+                    if (freshRes.data?.status === "success") {
+                        freshEbSummary = freshRes.data.data;
+                    }
+                } catch (e) {
+                    console.warn("Could not refresh EB summary before save — using cached values.", e);
+                }
+                const runningBalance = JSON.parse(JSON.stringify(freshEbSummary));
+
 
                 if (rowsWithData.length > 0) {
                     for (const row of rowsWithData) {
@@ -1042,24 +1132,39 @@ export default function EnergyAllotment() {
                             const splitValues: any = {};
 
                             slots.forEach(slot => {
-                                const totalAlloc = parseFloat(row[slot]) || 0;
+                                let rem = parseFloat(stripCommas(row[slot])) || 0;
                                 const oldPP = parseFloat(row[`${slot}_pp`]) || 0;
                                 const oldBank = parseFloat(row[`${slot}_bank`]) || 0;
 
-                                let availablePP = (parseFloat(runningBalance[wm]?.[`${slot}_pp`]) || 0) + oldPP;
-                                let utilizedPP = Math.min(totalAlloc, availablePP);
-                                let remaining = totalAlloc - utilizedPP;
+                                // 1. Use own pool first
+                                let availOwnPP = (parseFloat(runningBalance[wm]?.[`${slot}_pp`]) || 0) + oldPP;
+                                let useOwnPP = Math.min(rem, availOwnPP);
+                                rem -= useOwnPP;
+                                if (runningBalance[wm]) runningBalance[wm][`${slot}_pp`] = availOwnPP - useOwnPP;
 
-                                let availableBank = (parseFloat(runningBalance[wm]?.[`${slot}_bank`]) || 0) + oldBank;
-                                let utilizedBank = Math.min(remaining, availableBank);
+                                let availOwnBN = (parseFloat(runningBalance[wm]?.[`${slot}_bank`]) || 0) + oldBank;
+                                let useOwnBN = Math.min(rem, availOwnBN);
+                                rem -= useOwnBN;
+                                if (runningBalance[wm]) runningBalance[wm][`${slot}_bank`] = availOwnBN - useOwnBN;
 
-                                splitValues[`${slot}_power`] = utilizedPP;
-                                splitValues[`${slot}_banking`] = utilizedBank;
+                                // 2. Borrow from partner if needed
+                                let usePartPP = 0;
+                                let usePartBN = 0;
+                                const partner = PARTNER_SLOT[slot];
+                                if (rem > 0 && partner && canBorrowFrom(slot, partner)) {
+                                    let availPartPP = parseFloat(runningBalance[wm]?.[`${partner}_pp`]) || 0;
+                                    usePartPP = Math.min(rem, availPartPP);
+                                    rem -= usePartPP;
+                                    if (runningBalance[wm]) runningBalance[wm][`${partner}_pp`] = availPartPP - usePartPP;
 
-                                if (runningBalance[wm]) {
-                                    runningBalance[wm][`${slot}_pp`] = (availablePP - utilizedPP);
-                                    runningBalance[wm][`${slot}_bank`] = (availableBank - utilizedBank);
+                                    let availPartBN = parseFloat(runningBalance[wm]?.[`${partner}_bank`]) || 0;
+                                    usePartBN = Math.min(rem, availPartBN);
+                                    rem -= usePartBN;
+                                    if (runningBalance[wm]) runningBalance[wm][`${partner}_bank`] = availPartBN - usePartBN;
                                 }
+
+                                splitValues[`${slot}_power`] = useOwnPP + usePartPP;
+                                splitValues[`${slot}_banking`] = useOwnBN + usePartBN;
                             });
 
                             const payload = {
@@ -1078,9 +1183,9 @@ export default function EnergyAllotment() {
                                 c4_banking: splitValues.c4_banking,
                                 c5_power: splitValues.c5_power,
                                 c5_banking: splitValues.c5_banking,
-                                requested_power: parseFloat(row.consumption) || 0,
+                                requested_power: parseFloat(stripCommas(row.consumption)) || 0,
                                 requested_banking: 0,
-                                allocated_power: parseFloat(row.c1_allot) || 0,
+                                allocated_power: parseFloat(stripCommas(row.c1_allot)) || 0,
                                 allocated_banking: 0,
                                 utilized_power: 0,
                                 utilized_banking: 0
@@ -1181,7 +1286,6 @@ export default function EnergyAllotment() {
                                 allotment_month: parseInt(selectedMonth),
                                 charges: {
                                     C001: row.mrc,
-                                    C002: row.omc,
                                     C003: row.trc,
                                     C004: row.oc1,
                                     C005: row.kp,
@@ -1189,8 +1293,6 @@ export default function EnergyAllotment() {
                                     C007: row.shc,
                                     C008: row.other,
                                     C010: row.dc,
-                                    C009: row.wc,
-                                    C011: row.sgt
                                 }
                             };
                             try {
@@ -1225,7 +1327,6 @@ export default function EnergyAllotment() {
                         let code = row.chargeCode || "";
                         if (!code) {
                             if (row.chargeKey === 'mrc') code = 'C001';
-                            else if (row.chargeKey === 'omc') code = 'C002';
                             else if (row.chargeKey === 'trc') code = 'C003';
                             else if (row.chargeKey === 'oc1') code = 'C004';
                             else if (row.chargeKey === 'kp') code = 'C005';
@@ -1233,13 +1334,12 @@ export default function EnergyAllotment() {
                             else if (row.chargeKey === 'shc') code = 'C007';
                             else if (row.chargeKey === 'other') code = 'C008';
                             else if (row.chargeKey === 'dc') code = 'C010';
-                            else if (row.chargeKey === 'wc') code = 'C009';
-                            else if (row.chargeKey === 'sgt') code = 'C011';
                         }
 
                         return {
                             charge_code: code,
                             value: row.value,
+                            system_value: row.systemValue,
                             customer_id: match?.id || match?.customer_id || 0,
                             service_id: match?.service_id || 0
                         };
@@ -1248,7 +1348,11 @@ export default function EnergyAllotment() {
                     const grouped = items.reduce((acc: any, item: any) => {
                         const key = `${item.customer_id}-${item.service_id}`;
                         if (!acc[key]) acc[key] = { customer_id: item.customer_id, service_id: item.service_id, items: [] };
-                        acc[key].items.push({ charge_code: item.charge_code, value: item.value });
+                        acc[key].items.push({
+                            charge_code: item.charge_code,
+                            value: item.value,
+                            system_value: item.system_value
+                        });
                         return acc;
                     }, {});
 
@@ -1282,6 +1386,13 @@ export default function EnergyAllotment() {
             if (successCount > 0) {
                 toast.success(`✅ ${successCount} records saved successfully!`);
                 setIsEditing(false);
+                // Clear borrow-tracking so freshly loaded data starts with no UI deductions
+                setBorrowedAmounts({});
+                await Promise.all([
+                    autoLoadAllAllotments(),
+                    reloadWindmillCharges(),
+                    reloadSolarCharges()
+                ]);
             } else if (errorCount > 0) {
                 toast.error(`❌ Failed to save. Errors: ${errorCount}`);
             }
@@ -1316,14 +1427,14 @@ export default function EnergyAllotment() {
                     return;
                 }
 
-                if (windmill_charges.length > 0) {
+                if (windmill_charges && windmill_charges.length > 0) {
                     const wsWindmill = utils.json_to_sheet(windmill_charges);
                     const colWidths = Object.keys(windmill_charges[0]).map(key => ({ wch: Math.max(key.length, 14) }));
                     wsWindmill['!cols'] = colWidths;
                     utils.book_append_sheet(workbook, wsWindmill, "Windmill Charges");
                 }
 
-                if (solar_charges.length > 0) {
+                if (solar_charges && solar_charges.length > 0) {
                     const wsSolar = utils.json_to_sheet(solar_charges);
                     const colWidths = Object.keys(solar_charges[0]).map(key => ({ wch: Math.max(key.length, 14) }));
                     wsSolar['!cols'] = colWidths;
@@ -1375,7 +1486,7 @@ export default function EnergyAllotment() {
                 ...newData[index],
                 customer,
                 seNumber: "",
-                mrc: 0, omc: 0, trc: 0, oc1: 0, kp: 0, ec: 0, shc: 0, other: 0, dc: 0
+                mrc: 0, trc: 0, oc1: 0, kp: 0, ec: 0, shc: 0, other: 0, dc: 0
             };
             return newData;
         });
@@ -1392,7 +1503,6 @@ export default function EnergyAllotment() {
                 ...row,
                 seNumber,
                 mrc: wmCharges["C001"] || 0,
-                omc: wmCharges["C002"] || 0,
                 trc: wmCharges["C003"] || 0,
                 oc1: wmCharges["C004"] || 0,
                 kp: wmCharges["C005"] || 0,
@@ -1409,7 +1519,9 @@ export default function EnergyAllotment() {
     const handleChargeFieldChange = (index: number, field: string, value: string) => {
         setChargeAllocationRows(prev => {
             const newData = [...prev];
-            newData[index] = { ...newData[index], [field]: Number(value) || 0 };
+            const cleanVal = stripCommas(value);
+            if (cleanVal !== '' && isNaN(Number(cleanVal))) return prev;
+            newData[index] = { ...newData[index], [field]: Number(cleanVal) || 0 };
             return newData;
         });
     };
@@ -1423,7 +1535,13 @@ export default function EnergyAllotment() {
 
     const handleSolarFieldChange = (index: number, value: string) => {
         const newData = [...solarAllocationRows];
-        newData[index] = { ...newData[index], value: Number(value) || 0 };
+        // Allow numeric characters and a single decimal point for typing, strip commas
+        const cleanValue = stripCommas(value).replace(/[^0-9.]/g, '');
+        // If there's more than one dot, keep only the first one
+        const parts = cleanValue.split('.');
+        const finalValue = parts.length > 2 ? `${parts[0]}.${parts.slice(1).join('')}` : cleanValue;
+
+        newData[index] = { ...newData[index], value: finalValue };
         setSolarAllocationRows(newData);
     };
 
@@ -1439,6 +1557,27 @@ export default function EnergyAllotment() {
         setSolarAllocationRows(newData);
     };
 
+    const addSolarSplitRow = (index: number) => {
+        setSolarAllocationRows(prev => {
+            const rowToCopy = prev[index];
+            const newRows = [...prev];
+            newRows.splice(index + 1, 0, {
+                ...rowToCopy,
+                tempId: `${rowToCopy.chargeCode}-${Math.random().toString(36).substring(2, 11)}`,
+                customer: "",
+                seNumber: "",
+                value: 0,
+                isChecked: true
+            });
+            return newRows;
+        });
+    };
+
+    const removeSolarSplitRow = (index: number) => {
+        const newRows = solarAllocationRows.filter((_, i) => i !== index);
+        setSolarAllocationRows(newRows);
+    };
+
     const handleEnergyAllotmentChange = (index: number, field: string, value: string) => {
         const newData = [...energyAllotmentData];
         newData[index] = { ...newData[index], [field]: value };
@@ -1448,6 +1587,11 @@ export default function EnergyAllotment() {
     const handleGridUpdate = (customer: string, seNumber: string, wm: string, field: string, value: string) => {
         const index = energyAllotmentData.findIndex(d => d.customer === customer && d.seNumber === seNumber && d.wm === wm);
 
+        const cleanValue = stripCommas(value);
+        if (cleanValue !== '' && isNaN(Number(cleanValue))) return; // Ignore non-numeric input
+
+        const formattedValue = formatWithCommas(cleanValue);
+
         // Subtraction Logic: Requested = Original - Allocated
         const originalReq = consumptionRequests.find(r =>
             r.customer_name === customer &&
@@ -1455,35 +1599,105 @@ export default function EnergyAllotment() {
         );
 
         const getSubtractedValue = (allocVal: string, origVal: any) => {
-            const a = parseFloat(allocVal) || 0;
+            const a = parseFloat(stripCommas(allocVal)) || 0;
             const o = parseFloat(origVal) || 0;
             const res = Math.max(o - a, 0);
             return res.toFixed(2).replace(/\.00$/, "");
         };
 
+        const typedValue = parseFloat(cleanValue) || 0;
+
+        // ── Cascade Borrowing: update own + partner P:/B: headers (not allocated cells) ──
+        //  Drain order per slot:
+        //    C1 → own PP → own Bank → C2 PP → C2 Bank → C4 PP → C4 Bank
+        //    C2 → own PP → own Bank → C1 PP → C1 Bank → C4 PP → C4 Bank
+        //    C5 → own PP → own Bank → C4 PP → C4 Bank
+        //    C4 → own PP → own Bank  (cannot borrow further)
+        //
+        //  C5 is NEVER a lender. Borrowing is scoped to the same windmill number.
+
+        const cascadePartners: Record<string, string[]> = {
+            c1: ['c2', 'c4'],
+            c2: ['c1', 'c4'],
+            c5: ['c4'],
+            c4: [],
+        };
+        const partners = cascadePartners[field] ?? [];
+
+        if (['c1', 'c2', 'c4', 'c5'].includes(field)) {
+            const borrowKey = `${customer}|${seNumber}|${wm}|${field}`;
+            const prevBorrows = (borrowedAmounts as any)[borrowKey] || {};
+
+            // Step 1a – restore previous OWN consumption to own headers
+            const prevOwn = prevBorrows['_own'] || { pp: 0, bank: 0 };
+            const restoredOwnPP   = (Number(ebSummaryData[wm]?.[`${field}_pp`])   || 0) + prevOwn.pp;
+            const restoredOwnBank = (Number(ebSummaryData[wm]?.[`${field}_bank`]) || 0) + prevOwn.bank;
+
+            // Step 1b – restore previous partner borrows to partner headers
+            const restoredPartner: Record<string, { pp: number; bank: number }> = {};
+            for (const p of partners) {
+                const prev = prevBorrows[p] || { pp: 0, bank: 0 };
+                restoredPartner[p] = {
+                    pp:   (Number(ebSummaryData[wm]?.[`${p}_pp`])   || 0) + prev.pp,
+                    bank: (Number(ebSummaryData[wm]?.[`${p}_bank`]) || 0) + prev.bank,
+                };
+            }
+
+            // Step 2 – consume own PP first, then own Bank
+            const ownPPConsumed   = Math.min(typedValue, restoredOwnPP);
+            let deficit           = typedValue - ownPPConsumed;
+            const ownBankConsumed = Math.min(deficit, restoredOwnBank);
+            deficit              -= ownBankConsumed;
+
+            // Step 3 – cascade through partners PP then Bank
+            const newBorrows: Record<string, { pp: number; bank: number }> = {
+                _own: { pp: ownPPConsumed, bank: ownBankConsumed }
+            };
+            for (const p of partners) {
+                if (deficit <= 0) { newBorrows[p] = { pp: 0, bank: 0 }; continue; }
+                const bPP   = Math.min(deficit, restoredPartner[p].pp);   deficit -= bPP;
+                const bBank = Math.min(deficit, restoredPartner[p].bank); deficit -= bBank;
+                newBorrows[p] = { pp: bPP, bank: bBank };
+            }
+
+            // Step 4 – apply deductions to OWN headers + all partner headers
+            const ebUpdates: Record<string, any> = { ...(ebSummaryData[wm] || {}) };
+            ebUpdates[`${field}_pp`]   = restoredOwnPP   - ownPPConsumed;
+            ebUpdates[`${field}_bank`] = restoredOwnBank - ownBankConsumed;
+            for (const p of partners) {
+                const b = newBorrows[p] || { pp: 0, bank: 0 };
+                ebUpdates[`${p}_pp`]   = restoredPartner[p].pp   - b.pp;
+                ebUpdates[`${p}_bank`] = restoredPartner[p].bank - b.bank;
+            }
+            setEbSummaryData(prev => ({ ...prev, [wm]: ebUpdates }));
+
+            // Step 5 – persist for future undo
+            setBorrowedAmounts(prev => ({ ...prev, [borrowKey]: newBorrows }));
+        }
+        // ──────────────────────────────────────────────────────────────────────
+
         if (index >= 0) {
-            // Update existing
+            // Update existing row — only set the TYPED slot value
             const newData = [...energyAllotmentData];
-            const updated: any = { ...newData[index], [field]: value };
+            const updated: any = { ...newData[index], [field]: formattedValue };
 
             // Sync: Allocated -> Requested subtraction
-            if (field === 'c1') updated.req_c1 = getSubtractedValue(value, originalReq?.c1);
-            if (field === 'c2') updated.req_c2 = getSubtractedValue(value, originalReq?.c2);
-            if (field === 'c4') updated.req_c4 = getSubtractedValue(value, originalReq?.c4);
-            if (field === 'c5') updated.req_c5 = getSubtractedValue(value, originalReq?.c5);
+            if (field === 'c1') updated.req_c1 = getSubtractedValue(formattedValue, originalReq?.c1);
+            if (field === 'c2') updated.req_c2 = getSubtractedValue(formattedValue, originalReq?.c2);
+            if (field === 'c4') updated.req_c4 = getSubtractedValue(formattedValue, originalReq?.c4);
+            if (field === 'c5') updated.req_c5 = getSubtractedValue(formattedValue, originalReq?.c5);
 
             newData[index] = updated;
             setEnergyAllotmentData(newData);
         } else {
             // Create new entry — carry customer_id from the sibling (same customer+SE, different WM)
             const sibling = energyAllotmentData.find(d => d.customer === customer && d.seNumber === seNumber);
-            // Resolve customer_id from sibling using all possible field name variants
             const resolvedCustId = sibling?.customer_id || sibling?.id || sibling?.cust_id || sibling?.mc_id || 0;
             const newEntry: any = {
                 wm,
                 customer,
                 seNumber,
-                customer_id: resolvedCustId,   // ← always carry the PK forward
+                customer_id: resolvedCustId,
                 service_id: sibling?.service_id || 0,
                 consumption: sibling ? sibling.consumption : "0",
                 c1: "0", c1_pp: "0", c1_bank: "0",
@@ -1491,18 +1705,19 @@ export default function EnergyAllotment() {
                 c4: "0", c4_pp: "0", c4_bank: "0",
                 c5: "0", c5_pp: "0", c5_bank: "0",
                 c1_allot: "0", c2_allot: "0", c4_allot: "0", c5_allot: "0",
-                [field]: value
+                [field]: formattedValue
             };
 
             // Sync: Allocated -> Requested subtraction
-            if (field === 'c1') newEntry.req_c1 = getSubtractedValue(value, originalReq?.c1);
-            if (field === 'c2') newEntry.req_c2 = getSubtractedValue(value, originalReq?.c2);
-            if (field === 'c4') newEntry.req_c4 = getSubtractedValue(value, originalReq?.c4);
-            if (field === 'c5') newEntry.req_c5 = getSubtractedValue(value, originalReq?.c5);
+            if (field === 'c1') newEntry.req_c1 = getSubtractedValue(formattedValue, originalReq?.c1);
+            if (field === 'c2') newEntry.req_c2 = getSubtractedValue(formattedValue, originalReq?.c2);
+            if (field === 'c4') newEntry.req_c4 = getSubtractedValue(formattedValue, originalReq?.c4);
+            if (field === 'c5') newEntry.req_c5 = getSubtractedValue(formattedValue, originalReq?.c5);
 
             setEnergyAllotmentData([...energyAllotmentData, newEntry]);
         }
     };
+
 
     return (
         <ErrorBoundary>
@@ -1607,14 +1822,20 @@ export default function EnergyAllotment() {
                                 </div>
 
                                 <TabsContent value="list" className="mt-0">
-                                    <div className="flex justify-start gap-4 p-2 bg-white border-x border-slate-200">
-                                        <div className="flex items-center gap-1.5 text-xs font-medium">
-                                            <span className="font-bold text-amber-500">P</span>
-                                            <span className="text-slate-600">- Power Plant Available</span>
+                                    <div className="flex justify-between items-center p-2 bg-white border-x border-slate-200">
+                                        <div className="flex gap-4">
+                                            <div className="flex items-center gap-1.5 text-xs font-medium">
+                                                <span className="font-bold text-amber-500">P</span>
+                                                <span className="text-slate-600">- Power Plant Available</span>
+                                            </div>
+                                            <div className="flex items-center gap-1.5 text-xs font-medium">
+                                                <span className="font-bold text-red-500">B</span>
+                                                <span className="text-slate-600">- Banking Units</span>
+                                            </div>
                                         </div>
-                                        <div className="flex items-center gap-1.5 text-xs font-medium">
-                                            <span className="font-bold text-red-500">B</span>
-                                            <span className="text-slate-600">- Banking Units</span>
+                                        <div className="text-[11px] font-bold text-indigo-600 pr-4 flex items-center gap-2">
+                                            <span className="text-slate-400 font-normal">Borrowing:</span>
+                                            C1 <span className="text-indigo-400">{"<--->"}</span> C2 and C4 <span className="text-indigo-400">{"--->"}</span> C5
                                         </div>
                                     </div>
                                     <div className="border border-slate-200 rounded-b-lg mt-0 bg-white overflow-x-auto thin-scrollbar" style={{ maxWidth: open ? 'calc(100vw - 18rem)' : 'calc(100vw - 5rem)' }}>
@@ -1640,34 +1861,17 @@ export default function EnergyAllotment() {
                                                     {windmillNumbers.map((wm) => {
                                                         const wmItems = energyAllotmentData.filter(d => d.wm === wm);
                                                         const renderColHeader = (col: 'c1' | 'c2' | 'c4' | 'c5', label: string, isLast = false) => {
-                                                            const totalPP = ebSummaryData[wm] ? Number(ebSummaryData[wm][`${col}_pp`]) || 0 : 0;
-                                                            const totalBank = ebSummaryData[wm] ? Number(ebSummaryData[wm][`${col}_bank`]) || 0 : 0;
 
-                                                            const totalAllocated = wmItems.reduce((acc, curr) => acc + (Number(String(curr[col]).replace(/,/g, '')) || 0), 0);
-
-                                                            const remainingPP = Math.max(totalPP - totalAllocated, 0);
-                                                            const spillToBank = Math.max(totalAllocated - totalPP, 0);
-                                                            const remainingBank = Math.max(totalBank - spillToBank, 0);
-
-                                                            let displayPower = Math.round(remainingPP);
-                                                            let displayBank = Math.round(remainingBank);
+                                                            const displayPower = ebSummaryData[wm] ? Number(ebSummaryData[wm][`${col}_pp`]) || 0 : 0;
+                                                            const displayBank = ebSummaryData[wm] ? Number(ebSummaryData[wm][`${col}_bank`]) || 0 : 0;
 
                                                             const handleManualUpdate = (col: string, type: 'pp' | 'bank', newVal: string) => {
-                                                                const numericVal = parseFloat(newVal) || 0;
-                                                                let updatedBase;
-                                                                if (type === 'pp') {
-                                                                    // We set the base initial balance such that Base - TotalAllocated = numericVal
-                                                                    updatedBase = numericVal + totalAllocated;
-                                                                } else {
-                                                                    // RemainingBank = BaseBank - SpillToBank
-                                                                    // BaseBank = RemainingBank + SpillToBank
-                                                                    const currentSpill = Math.max(totalAllocated - totalPP, 0);
-                                                                    updatedBase = numericVal + currentSpill;
-                                                                }
-
+                                                                const cleanVal = stripCommas(newVal);
+                                                                if (cleanVal !== '' && isNaN(Number(cleanVal))) return;
+                                                                const numericVal = parseFloat(cleanVal) || 0;
                                                                 setEbSummaryData(prev => ({
                                                                     ...prev,
-                                                                    [wm]: { ...prev[wm], [`${col}_${type}`]: updatedBase }
+                                                                    [wm]: { ...prev[wm], [`${col}_${type}`]: numericVal }
                                                                 }));
                                                             };
 
@@ -1678,7 +1882,7 @@ export default function EnergyAllotment() {
                                                                             <span className="text-xs text-white font-bold w-4 text-right">P:</span>
                                                                             <input
                                                                                 type="text"
-                                                                                value={displayPower}
+                                                                                value={formatWithCommas(displayPower)}
                                                                                 onChange={(e) => handleManualUpdate(col, 'pp', e.target.value)}
                                                                                 className="border border-black px-1 bg-white text-red-500 w-[65px] text-center font-bold h-[24px] text-xs focus:outline-none"
                                                                             />
@@ -1687,7 +1891,7 @@ export default function EnergyAllotment() {
                                                                             <span className="text-xs text-white font-bold w-4 text-right">B:</span>
                                                                             <input
                                                                                 type="text"
-                                                                                value={displayBank}
+                                                                                value={formatWithCommas(displayBank)}
                                                                                 onChange={(e) => handleManualUpdate(col, 'bank', e.target.value)}
                                                                                 className="border border-black px-1 bg-white text-red-500 w-[65px] text-center font-bold h-[24px] text-xs focus:outline-none"
                                                                             />
@@ -1725,7 +1929,7 @@ export default function EnergyAllotment() {
                                                                 {generators.map((wm) => {
                                                                     const renderC = (col: 'c1' | 'c2' | 'c4' | 'c5') => {
                                                                         const totalPP = ebSummaryData && ebSummaryData[wm] ? Number(ebSummaryData[wm][`${col}_pp`]) || 0 : 0;
-                                                                        return <TableCell key={`${wm}-${col}-pp`} className="p-1 border-r text-center font-bold text-[#0369a1] text-[11px] bg-[#e0f2fe]">{totalPP}</TableCell>
+                                                                        return <TableCell key={`${wm}-${col}-pp`} className="p-1 border-r text-center font-bold text-[#0369a1] text-[11px] bg-[#e0f2fe]">{formatWithCommas(totalPP)}</TableCell>
                                                                     };
                                                                     return (
                                                                         <React.Fragment key={`${wm}-pp`}>
@@ -1740,14 +1944,14 @@ export default function EnergyAllotment() {
                                                             </TableRow>
 
                                                             {/* Banking Row */}
-                                                            <TableRow className="bg-[#ffedd5] border-b-2 border-slate-300 hover:bg-[#ffedd5]">
+                                                            <TableRow className="bg-[#ffedd5] border-b border-white hover:bg-[#ffedd5]">
                                                                 <TableCell colSpan={3} className="py-2 text-sm text-[#c2410c] font-bold border-r bg-[#ffedd5] align-middle sticky left-0 z-20 text-center uppercase tracking-wide">
                                                                     Banking
                                                                 </TableCell>
                                                                 {generators.map((wm) => {
                                                                     const renderC = (col: 'c1' | 'c2' | 'c4' | 'c5') => {
                                                                         const totalBank = ebSummaryData && ebSummaryData[wm] ? Number(ebSummaryData[wm][`${col}_bank`]) || 0 : 0;
-                                                                        return <TableCell key={`${wm}-${col}-bank`} className="p-1 border-r text-center font-bold text-[#c2410c] text-[11px] bg-[#ffedd5]">{totalBank}</TableCell>
+                                                                        return <TableCell key={`${wm}-${col}-bank`} className="p-1 border-r text-center font-bold text-[#c2410c] text-[11px] bg-[#ffedd5]">{formatWithCommas(totalBank)}</TableCell>
                                                                     };
                                                                     return (
                                                                         <React.Fragment key={`${wm}-bank`}>
@@ -1761,12 +1965,13 @@ export default function EnergyAllotment() {
                                                                 <TableCell className="p-1 border-r bg-[#ffedd5] font-bold text-[#c2410c] text-center">-</TableCell>
                                                             </TableRow>
 
+
                                                             {Object.entries(groupedData).sort().map(([customer, seSet]) => {
                                                                 const seList = Array.from(seSet).sort();
 
                                                                 const rows = seList.map((seNumber, seIndex) => {
                                                                     const rowItems = filteredData.filter(d => String(d.customer || '').trim() === customer && d.seNumber === seNumber);
-                                                                    const rowTotal = rowItems.reduce((acc, d) => acc + (Number(d.c1) || 0) + (Number(d.c2) || 0) + (Number(d.c4) || 0) + (Number(d.c5) || 0), 0);
+                                                                    const rowTotal = rowItems.reduce((acc, d) => acc + (Number(stripCommas(d.c1)) || 0) + (Number(stripCommas(d.c2)) || 0) + (Number(stripCommas(d.c4)) || 0) + (Number(stripCommas(d.c5)) || 0), 0);
                                                                     const totalConsumptionReq = consumptionRequests.find(r => String(r.customer_name || '').trim() === customer && r.sc_number === seNumber);
 
                                                                     const currentIndex = renderedOrder.findIndex(r => r.customer === customer && r.seNumber === seNumber);
@@ -1774,13 +1979,13 @@ export default function EnergyAllotment() {
                                                                     const getBalance = (orig: any, totalAlloc: number) => {
                                                                         const o = parseFloat(orig) || 0;
                                                                         const res = Math.max(o - totalAlloc, 0);
-                                                                        return res.toFixed(2).replace(/\.00$/, "");
+                                                                        return formatWithCommas(res.toFixed(2).replace(/\.00$/, ""));
                                                                     };
 
-                                                                    const totalAllocC1 = rowItems.reduce((acc, d) => acc + (parseFloat(d.c1) || 0), 0);
-                                                                    const totalAllocC2 = rowItems.reduce((acc, d) => acc + (parseFloat(d.c2) || 0), 0);
-                                                                    const totalAllocC4 = rowItems.reduce((acc, d) => acc + (parseFloat(d.c4) || 0), 0);
-                                                                    const totalAllocC5 = rowItems.reduce((acc, d) => acc + (parseFloat(d.c5) || 0), 0);
+                                                                    const totalAllocC1 = rowItems.reduce((acc, d) => acc + (parseFloat(stripCommas(d.c1)) || 0), 0);
+                                                                    const totalAllocC2 = rowItems.reduce((acc, d) => acc + (parseFloat(stripCommas(d.c2)) || 0), 0);
+                                                                    const totalAllocC4 = rowItems.reduce((acc, d) => acc + (parseFloat(stripCommas(d.c4)) || 0), 0);
+                                                                    const totalAllocC5 = rowItems.reduce((acc, d) => acc + (parseFloat(stripCommas(d.c5)) || 0), 0);
 
                                                                     const balC1 = getBalance(totalConsumptionReq?.c1, totalAllocC1);
                                                                     const balC2 = getBalance(totalConsumptionReq?.c2, totalAllocC2);
@@ -1792,11 +1997,25 @@ export default function EnergyAllotment() {
                                                                             {/* Row 1: Requested */}
                                                                             <TableRow className="hover:bg-slate-50 border-t border-slate-200 group">
                                                                                 {seIndex === 0 && (
-                                                                                    <TableCell rowSpan={seList.length * 4} className="py-2 text-sm text-indigo-700 font-bold border-r bg-white align-top border-b border-slate-200 sticky left-0 z-20 w-[120px] min-w-[120px]">
-                                                                                        {customer}
+                                                                                    <TableCell rowSpan={seList.length * 5} className="py-2 text-sm text-indigo-700 font-bold border-r bg-white align-top border-b border-slate-200 sticky left-0 z-20 w-[120px] min-w-[120px]">
+                                                                                        <div className="flex flex-col gap-1">
+                                                                                            <span className="uppercase">{customer}</span>
+                                                                                            {(() => {
+                                                                                                const custItem = filteredData.find(d => String(d.customer || '').trim() === customer);
+                                                                                                const totalAgreed = custItem?.totalAgreedUnits || 0;
+                                                                                                return (
+                                                                                                    <div className="mt-4 flex flex-col">
+                                                                                                        <span className="text-[10px] text-slate-500 font-semibold">Total Agreed Units :</span>
+                                                                                                        <span className="text-xs text-blue-700 font-bold">{totalAgreed}</span>
+                                                                                                        <span className="text-[10px] text-slate-500 font-semibold mt-1">Total Adjusted Units :</span>
+                                                                                                        <span className="text-xs text-emerald-700 font-bold">{actualAdjustedTotals[customer] || 0}</span>
+                                                                                                    </div>
+                                                                                                );
+                                                                                            })()}
+                                                                                        </div>
                                                                                     </TableCell>
                                                                                 )}
-                                                                                <TableCell rowSpan={4} className="py-2 text-sm text-slate-800 font-bold border-r bg-white align-top border-b border-slate-200 sticky left-[120px] z-20 w-[120px] min-w-[120px]">
+                                                                                <TableCell rowSpan={5} className="py-2 text-sm text-slate-800 font-bold border-r bg-white align-top border-b border-slate-200 sticky left-[120px] z-20 w-[120px] min-w-[120px]">
                                                                                     <div className="flex flex-col gap-2">
                                                                                         <span>{seNumber}</span>
                                                                                         <div className="flex flex-col text-[10px] font-semibold gap-1">
@@ -1809,19 +2028,23 @@ export default function EnergyAllotment() {
                                                                                     Requested
                                                                                 </TableCell>
                                                                                 {generators.map(wm => {
+                                                                                    const reqC1 = totalConsumptionReq?.c1 ?? '0';
+                                                                                    const reqC2 = totalConsumptionReq?.c2 ?? '0';
+                                                                                    const reqC4 = totalConsumptionReq?.c4 ?? '0';
+                                                                                    const reqC5 = totalConsumptionReq?.c5 ?? '0';
                                                                                     return (
                                                                                         <React.Fragment key={wm}>
                                                                                             <TableCell className="p-1 border-r text-center">
-                                                                                                <Input disabled className="h-7 text-center text-xs px-0" value={balC1} />
+                                                                                                <Input disabled className="h-7 text-center text-xs px-0" value={formatWithCommas(reqC1)} />
                                                                                             </TableCell>
                                                                                             <TableCell className="p-1 border-r text-center">
-                                                                                                <Input disabled className="h-7 text-center text-xs px-0" value={balC2} />
+                                                                                                <Input disabled className="h-7 text-center text-xs px-0" value={formatWithCommas(reqC2)} />
                                                                                             </TableCell>
                                                                                             <TableCell className="p-1 border-r text-center">
-                                                                                                <Input disabled className="h-7 text-center text-xs px-0" value={balC4} />
+                                                                                                <Input disabled className="h-7 text-center text-xs px-0" value={formatWithCommas(reqC4)} />
                                                                                             </TableCell>
                                                                                             <TableCell className="p-1 border-r text-center">
-                                                                                                <Input disabled className="h-7 text-center text-xs px-0" value={balC5} />
+                                                                                                <Input disabled className="h-7 text-center text-xs px-0" value={formatWithCommas(reqC5)} />
                                                                                             </TableCell>
                                                                                         </React.Fragment>
                                                                                     );
@@ -1845,10 +2068,34 @@ export default function EnergyAllotment() {
                                                                                         </React.Fragment>
                                                                                     );
                                                                                 })}
-                                                                                <TableCell className="p-1 border-r text-center align-middle bg-slate-50 font-bold text-slate-700 text-xs py-2">{rowTotal}</TableCell>
+                                                                                <TableCell className="p-1 border-r text-center align-middle bg-slate-50 font-bold text-slate-700 text-xs py-2">{formatWithCommas(rowTotal)}</TableCell>
                                                                             </TableRow>
 
-                                                                            {/* Row 3: Utilized Power */}
+                                                                            {/* Row 3: Balance Allocation */}
+                                                                            <TableRow className="hover:bg-green-50 group">
+                                                                                <TableCell className="py-2 px-2 text-xs text-green-700 font-semibold border-r bg-green-50 sticky left-[240px] z-20 w-[120px] min-w-[120px]">
+                                                                                    Balance Allocation
+                                                                                </TableCell>
+                                                                                {generators.map(wm => (
+                                                                                    <React.Fragment key={wm}>
+                                                                                        <TableCell className="p-1 border-r text-center">
+                                                                                            <Input disabled className="h-7 text-center text-xs px-0 bg-green-50 text-green-700 font-semibold" value={balC1} />
+                                                                                        </TableCell>
+                                                                                        <TableCell className="p-1 border-r text-center">
+                                                                                            <Input disabled className="h-7 text-center text-xs px-0 bg-green-50 text-green-700 font-semibold" value={balC2} />
+                                                                                        </TableCell>
+                                                                                        <TableCell className="p-1 border-r text-center">
+                                                                                            <Input disabled className="h-7 text-center text-xs px-0 bg-green-50 text-green-700 font-semibold" value={balC4} />
+                                                                                        </TableCell>
+                                                                                        <TableCell className="p-1 border-r text-center">
+                                                                                            <Input disabled className="h-7 text-center text-xs px-0 bg-green-50 text-green-700 font-semibold" value={balC5} />
+                                                                                        </TableCell>
+                                                                                    </React.Fragment>
+                                                                                ))}
+                                                                                <TableCell className="p-1 border-r text-center align-middle bg-green-50 font-bold text-green-700 text-xs py-2">-</TableCell>
+                                                                            </TableRow>
+
+                                                                            {/* Row 4: Utilized Power */}
                                                                             <TableRow className="hover:bg-slate-50 group">
                                                                                 <TableCell className="py-2 px-2 text-xs text-slate-600 font-semibold border-r bg-white sticky left-[240px] z-20 w-[120px] min-w-[120px]">
                                                                                     Utilized Power
@@ -1857,18 +2104,53 @@ export default function EnergyAllotment() {
                                                                                     const item = filteredData.find(d => String(d.customer || '').trim() === customer && d.seNumber === seNumber && d.wm === wm);
                                                                                     const getUP = (col: string) => {
                                                                                         if (!item) return '-';
-                                                                                        const totalPP = ebSummaryData && ebSummaryData[wm] ? Number(ebSummaryData[wm][`${col}_pp`]) || 0 : 0;
-                                                                                        const prevAlloc = cumulativeMap[wm]?.[col]?.[currentIndex] || 0;
-                                                                                        let availablePP = Math.max(totalPP - prevAlloc, 0);
                                                                                         const alloc = Number(String(item[col] || '0').replace(/,/g, ''));
-                                                                                        return Math.min(alloc, availablePP) || 0;
+                                                                                        if (alloc === 0) return 0;
+
+                                                                                        const s = ebSummaryData[wm] || {};
+                                                                                        const p = {
+                                                                                            c1: Number(s.c1_pp) || 0, c2: Number(s.c2_pp) || 0,
+                                                                                            c4: Number(s.c4_pp) || 0, c5: Number(s.c5_pp) || 0
+                                                                                        };
+                                                                                        const prev = (c: string) => cumulativeMap[wm]?.[c]?.[currentIndex] || 0;
+
+                                                                                        if (col === 'c1' || col === 'c2') {
+                                                                                            const sharedPP = p.c1 + p.c2;
+                                                                                            const prevUsed = prev('c1') + prev('c2');
+                                                                                            return Math.min(alloc, Math.max(sharedPP - prevUsed, 0));
+                                                                                        }
+                                                                                        if (col === 'c4') {
+                                                                                            // C4 used by C4 and overflow of C5
+                                                                                            const prevC4 = prev('c4');
+                                                                                            const c5_borrowed_before = filteredData
+                                                                                                .filter((d, idx) => d.wm === wm && idx < currentIndex)
+                                                                                                .reduce((sum, d) => {
+                                                                                                    const a5 = Number(String(d.c5).replace(/,/g, '')) || 0;
+                                                                                                    return sum + Math.max(a5 - p.c5, 0);
+                                                                                                }, 0);
+                                                                                            return Math.min(alloc, Math.max(p.c4 - prevC4 - c5_borrowed_before, 0));
+                                                                                        }
+                                                                                        if (col === 'c5') {
+                                                                                            const ownAvail = Math.max(p.c5 - prev('c5'), 0);
+                                                                                            const fromOwn = Math.min(alloc, ownAvail);
+                                                                                            const rem = alloc - fromOwn;
+                                                                                            const prevC4Used = prev('c4') + filteredData
+                                                                                                .filter((d, idx) => d.wm === wm && idx < currentIndex)
+                                                                                                .reduce((sum, d) => {
+                                                                                                    const a5 = Number(String(d.c5).replace(/,/g, '')) || 0;
+                                                                                                    return sum + Math.max(a5 - p.c5, 0);
+                                                                                                }, 0);
+                                                                                            const fromC4 = Math.min(rem, Math.max(p.c4 - prevC4Used, 0));
+                                                                                            return fromOwn + fromC4;
+                                                                                        }
+                                                                                        return Math.min(alloc, Math.max((p[col as keyof typeof p] || 0) - prev(col), 0));
                                                                                     };
                                                                                     return (
                                                                                         <React.Fragment key={wm}>
-                                                                                            <TableCell className="p-1 border-r text-center text-[#B22222] font-semibold text-xs">{getUP('c1')}</TableCell>
-                                                                                            <TableCell className="p-1 border-r text-center text-[#B22222] font-semibold text-xs">{getUP('c2')}</TableCell>
-                                                                                            <TableCell className="p-1 border-r text-center text-[#B22222] font-semibold text-xs">{getUP('c4')}</TableCell>
-                                                                                            <TableCell className="p-1 border-r text-center text-[#B22222] font-semibold text-xs">{getUP('c5')}</TableCell>
+                                                                                            <TableCell className="p-1 border-r text-center text-[#B22222] font-semibold text-xs">{formatWithCommas(getUP('c1'))}</TableCell>
+                                                                                            <TableCell className="p-1 border-r text-center text-[#B22222] font-semibold text-xs">{formatWithCommas(getUP('c2'))}</TableCell>
+                                                                                            <TableCell className="p-1 border-r text-center text-[#B22222] font-semibold text-xs">{formatWithCommas(getUP('c4'))}</TableCell>
+                                                                                            <TableCell className="p-1 border-r text-center text-[#B22222] font-semibold text-xs">{formatWithCommas(getUP('c5'))}</TableCell>
                                                                                         </React.Fragment>
                                                                                     );
                                                                                 })}
@@ -1884,25 +2166,82 @@ export default function EnergyAllotment() {
                                                                                     const item = filteredData.find(d => String(d.customer || '').trim() === customer && d.seNumber === seNumber && d.wm === wm);
                                                                                     const getUB = (col: string) => {
                                                                                         if (!item) return '-';
-                                                                                        const totalPP = ebSummaryData && ebSummaryData[wm] ? Number(ebSummaryData[wm][`${col}_pp`]) || 0 : 0;
-                                                                                        const totalBank = ebSummaryData && ebSummaryData[wm] ? Number(ebSummaryData[wm][`${col}_bank`]) || 0 : 0;
-
-                                                                                        const prevAlloc = cumulativeMap[wm]?.[col]?.[currentIndex] || 0;
-                                                                                        let availablePP = Math.max(totalPP - prevAlloc, 0);
                                                                                         const alloc = Number(String(item[col] || '0').replace(/,/g, ''));
-                                                                                        const utilizedPower = Math.min(alloc, availablePP) || 0;
+                                                                                        if (alloc === 0) return 0;
 
-                                                                                        let bankUsedBefore = Math.max(prevAlloc - totalPP, 0);
-                                                                                        let availableBank = Math.max(totalBank - bankUsedBefore, 0);
-                                                                                        const remainingAlloc = alloc - utilizedPower;
-                                                                                        return Math.min(remainingAlloc, availableBank) || 0;
+                                                                                        const s = ebSummaryData[wm] || {};
+                                                                                        const p = {
+                                                                                            c1p: Number(s.c1_pp) || 0, c1b: Number(s.c1_bank) || 0,
+                                                                                            c2p: Number(s.c2_pp) || 0, c2b: Number(s.c2_bank) || 0,
+                                                                                            c4p: Number(s.c4_pp) || 0, c4b: Number(s.c4_bank) || 0,
+                                                                                            c5p: Number(s.c5_pp) || 0, c5b: Number(s.c5_bank) || 0
+                                                                                        };
+                                                                                        const prev = (c: string) => cumulativeMap[wm]?.[c]?.[currentIndex] || 0;
+
+                                                                                        const calcUB = (amt: number, ppPool: number, bnPool: number, prUsage: number) => {
+                                                                                            const avPP = Math.max(ppPool - prUsage, 0);
+                                                                                            const utPP = Math.min(amt, avPP);
+                                                                                            const rem = amt - utPP;
+                                                                                            const bnUsedBefore = Math.max(prUsage - ppPool, 0);
+                                                                                            const avBN = Math.max(bnPool - bnUsedBefore, 0);
+                                                                                            return Math.min(rem, avBN);
+                                                                                        };
+
+                                                                                        if (col === 'c1' || col === 'c2') {
+                                                                                            return calcUB(alloc, p.c1p + p.c2p, p.c1b + p.c2b, prev('c1') + prev('c2'));
+                                                                                        }
+
+                                                                                        if (col === 'c4') {
+                                                                                            // C4 pool used by C4 and C5 overflow
+                                                                                            const prevC4 = prev('c4');
+                                                                                            const c5_borrowed_before = filteredData
+                                                                                                .filter((d, idx) => d.wm === wm && idx < currentIndex)
+                                                                                                .reduce((sum, d) => {
+                                                                                                    const a5 = Number(String(d.c5).replace(/,/g, '')) || 0;
+                                                                                                    return sum + Math.max(a5 - p.c5p - p.c5b, 0);
+                                                                                                }, 0);
+                                                                                            return calcUB(alloc, p.c4p, p.c4b, prevC4 + c5_borrowed_before);
+                                                                                        }
+
+                                                                                        if (col === 'c5') {
+                                                                                            const avPP_own = Math.max(p.c5p - prev('c5'), 0);
+                                                                                            const utPP_own = Math.min(alloc, avPP_own);
+                                                                                            let r = alloc - utPP_own;
+
+                                                                                            const bnUsedBefore_own = Math.max(prev('c5') - p.c5p, 0);
+                                                                                            const avBN_own = Math.max(p.c5b - bnUsedBefore_own, 0);
+                                                                                            const utBN_own = Math.min(r, avBN_own);
+                                                                                            r -= utBN_own;
+
+                                                                                            if (r <= 0) return utBN_own;
+
+                                                                                            // Borrow from C4
+                                                                                            const prevC4Used = prev('c4') + filteredData
+                                                                                                .filter((d, idx) => d.wm === wm && idx < currentIndex)
+                                                                                                .reduce((sum, d) => {
+                                                                                                    const a5 = Number(String(d.c5).replace(/,/g, '')) || 0;
+                                                                                                    return sum + Math.max(a5 - p.c5p - p.c5b, 0);
+                                                                                                }, 0);
+
+                                                                                            const avPP_c4 = Math.max(p.c4p - prevC4Used, 0);
+                                                                                            const utPP_c4 = Math.min(r, avPP_c4);
+                                                                                            r -= utPP_c4;
+
+                                                                                            const bnUsedBefore_c4 = Math.max(prevC4Used - p.c4p, 0);
+                                                                                            const avBN_c4 = Math.max(p.c4b - bnUsedBefore_c4, 0);
+                                                                                            const utBN_c4 = Math.min(r, avBN_c4);
+
+                                                                                            return utBN_own + utBN_c4;
+                                                                                        }
+
+                                                                                        return calcUB(alloc, p[`${col}p` as keyof typeof p] || 0, p[`${col}b` as keyof typeof p] || 0, prev(col));
                                                                                     };
                                                                                     return (
                                                                                         <React.Fragment key={wm}>
-                                                                                            <TableCell className="p-1 border-r text-center text-[#B22222] font-semibold text-xs">{getUB('c1')}</TableCell>
-                                                                                            <TableCell className="p-1 border-r text-center text-[#B22222] font-semibold text-xs">{getUB('c2')}</TableCell>
-                                                                                            <TableCell className="p-1 border-r text-center text-[#B22222] font-semibold text-xs">{getUB('c4')}</TableCell>
-                                                                                            <TableCell className="p-1 border-r text-center text-[#B22222] font-semibold text-xs">{getUB('c5')}</TableCell>
+                                                                                            <TableCell className="p-1 border-r text-center text-[#B22222] font-semibold text-xs">{formatWithCommas(getUB('c1'))}</TableCell>
+                                                                                            <TableCell className="p-1 border-r text-center text-[#B22222] font-semibold text-xs">{formatWithCommas(getUB('c2'))}</TableCell>
+                                                                                            <TableCell className="p-1 border-r text-center text-[#B22222] font-semibold text-xs">{formatWithCommas(getUB('c4'))}</TableCell>
+                                                                                            <TableCell className="p-1 border-r text-center text-[#B22222] font-semibold text-xs">{formatWithCommas(getUB('c5'))}</TableCell>
                                                                                         </React.Fragment>
                                                                                     );
                                                                                 })}
@@ -1922,12 +2261,12 @@ export default function EnergyAllotment() {
                                                                                 const stats = filteredData
                                                                                     .filter(d => String(d.customer || '').trim() === customer && d.wm === wm)
                                                                                     .reduce((acc, curr) => {
-                                                                                        const c1 = Number(String(curr.c1).replace(/,/g, '')) || 0;
-                                                                                        const c2 = Number(String(curr.c2).replace(/,/g, '')) || 0;
-                                                                                        const c4 = Number(String(curr.c4).replace(/,/g, '')) || 0;
-                                                                                        const c5 = Number(String(curr.c5).replace(/,/g, '')) || 0;
+                                                                                        const c1 = Number(stripCommas(curr.c1)) || 0;
+                                                                                        const c2 = Number(stripCommas(curr.c2)) || 0;
+                                                                                        const c4 = Number(stripCommas(curr.c4)) || 0;
+                                                                                        const c5 = Number(stripCommas(curr.c5)) || 0;
 
-                                                                                        const count = [curr.c1, curr.c2, curr.c4, curr.c5].filter(val => parseFloat(val) > 0).length;
+                                                                                        const count = [curr.c1, curr.c2, curr.c4, curr.c5].filter(val => parseFloat(stripCommas(val)) > 0).length;
 
                                                                                         return {
                                                                                             sum: acc.sum + c1 + c2 + c4 + c5,
@@ -1937,20 +2276,20 @@ export default function EnergyAllotment() {
                                                                                 return (
                                                                                     <TableCell key={wm} colSpan={4} className="py-2 text-center font-bold text-indigo-700 text-xs border-r">
                                                                                         <div className="flex flex-col items-center justify-center">
-                                                                                            <span className="text-indigo-700 font-bold text-[13px]">{stats.sum}</span>
+                                                                                            <span className="text-indigo-700 font-bold text-[13px]">{formatWithCommas(stats.sum)}</span>
                                                                                             <span className="text-[10px] text-slate-500 font-medium">({stats.count} entries)</span>
                                                                                         </div>
                                                                                     </TableCell>
                                                                                 );
                                                                             })}
                                                                             <TableCell className="py-2 text-center font-bold text-indigo-700 text-xs border-r">
-                                                                                {filteredData.filter(d => String(d.customer || '').trim() === customer).reduce((acc, curr) => {
-                                                                                    const c1 = Number(String(curr.c1).replace(/,/g, '')) || 0;
-                                                                                    const c2 = Number(String(curr.c2).replace(/,/g, '')) || 0;
-                                                                                    const c4 = Number(String(curr.c4).replace(/,/g, '')) || 0;
-                                                                                    const c5 = Number(String(curr.c5).replace(/,/g, '')) || 0;
+                                                                                {formatWithCommas(filteredData.filter(d => String(d.customer || '').trim() === customer).reduce((acc, curr) => {
+                                                                                    const c1 = Number(stripCommas(curr.c1)) || 0;
+                                                                                    const c2 = Number(stripCommas(curr.c2)) || 0;
+                                                                                    const c4 = Number(stripCommas(curr.c4)) || 0;
+                                                                                    const c5 = Number(stripCommas(curr.c5)) || 0;
                                                                                     return acc + c1 + c2 + c4 + c5;
-                                                                                }, 0)}
+                                                                                }, 0))}
                                                                             </TableCell>
                                                                         </TableRow>
                                                                     </React.Fragment>
@@ -1976,7 +2315,6 @@ export default function EnergyAllotment() {
                                                         <TableHead className="py-2 h-10 font-semibold text-white whitespace-nowrap text-xs">Customer</TableHead>
                                                         <TableHead className="py-2 h-10 font-semibold text-white whitespace-nowrap text-xs">Service Number</TableHead>
                                                         <TableHead className="py-2 h-10 font-semibold text-white text-right whitespace-nowrap text-xs px-3">{chargeLabels.mrc}</TableHead>
-                                                        <TableHead className="py-2 h-10 font-semibold text-white text-right whitespace-nowrap text-xs px-3">{chargeLabels.omc}</TableHead>
                                                         <TableHead className="py-2 h-10 font-semibold text-white text-right whitespace-nowrap text-xs px-3">{chargeLabels.trc}</TableHead>
                                                         <TableHead className="py-2 h-10 font-semibold text-white text-right whitespace-nowrap text-xs px-3">{chargeLabels.oc1}</TableHead>
                                                         <TableHead className="py-2 h-10 font-semibold text-white text-right whitespace-nowrap text-xs px-3">{chargeLabels.kp}</TableHead>
@@ -1984,14 +2322,12 @@ export default function EnergyAllotment() {
                                                         <TableHead className="py-2 h-10 font-semibold text-white text-right whitespace-nowrap text-xs px-3">{chargeLabels.shc}</TableHead>
                                                         <TableHead className="py-2 h-10 font-semibold text-white text-right whitespace-nowrap text-xs px-3">{chargeLabels.other}</TableHead>
                                                         <TableHead className="py-2 h-10 font-semibold text-white text-right whitespace-nowrap text-xs px-3">{chargeLabels.dc}</TableHead>
-                                                        <TableHead className="py-2 h-10 font-semibold text-white text-right whitespace-nowrap text-xs px-3">{chargeLabels.wc}</TableHead>
-                                                        <TableHead className="py-2 h-10 font-semibold text-white text-right whitespace-nowrap text-xs px-3">{chargeLabels.sgt}</TableHead>
                                                     </TableRow>
                                                 </TableHeader>
                                                 <TableBody>
                                                     {isFetchingCharges ? (
                                                         <TableRow>
-                                                            <TableCell colSpan={14} className="h-24 text-center text-slate-500 italic text-sm">
+                                                            <TableCell colSpan={11} className="h-24 text-center text-slate-500 italic text-sm">
                                                                 <div className="flex flex-col items-center justify-center gap-2">
                                                                     <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
                                                                     Fetching previous month charges from EB statements...
@@ -2025,6 +2361,7 @@ export default function EnergyAllotment() {
                                                                                     if (se === row.seNumber) return true;
                                                                                     const isUsed = chargeAllocationRows.some((r, idx) =>
                                                                                         idx !== index &&
+                                                                                        r.windmill === row.windmill &&
                                                                                         r.customer === row.customer &&
                                                                                         r.seNumber === se
                                                                                     );
@@ -2036,17 +2373,14 @@ export default function EnergyAllotment() {
                                                                         </SelectContent>
                                                                     </Select>
                                                                 </TableCell>
-                                                                <TableCell className="p-1.5 border-r"><Input readOnly={!isEditing} className="h-8 text-right text-[11px] border-slate-200 shadow-none focus-visible:ring-1 bg-white text-black font-normal rounded-sm px-2" value={row.mrc} onChange={(e) => handleChargeFieldChange(index, 'mrc', e.target.value)} /></TableCell>
-                                                                <TableCell className="p-1.5 border-r"><Input readOnly={!isEditing} className="h-8 text-right text-[11px] border-slate-200 shadow-none focus-visible:ring-1 bg-white text-black font-normal rounded-sm px-2" value={row.omc} onChange={(e) => handleChargeFieldChange(index, 'omc', e.target.value)} /></TableCell>
-                                                                <TableCell className="p-1.5 border-r"><Input readOnly={!isEditing} className="h-8 text-right text-[11px] border-slate-200 shadow-none focus-visible:ring-1 bg-white text-black font-normal rounded-sm px-2" value={row.trc} onChange={(e) => handleChargeFieldChange(index, 'trc', e.target.value)} /></TableCell>
-                                                                <TableCell className="p-1.5 border-r"><Input readOnly={!isEditing} className="h-8 text-right text-[11px] border-slate-200 shadow-none focus-visible:ring-1 bg-white text-black font-normal rounded-sm px-2" value={row.oc1} onChange={(e) => handleChargeFieldChange(index, 'oc1', e.target.value)} /></TableCell>
-                                                                <TableCell className="p-1.5 border-r"><Input readOnly={!isEditing} className="h-8 text-right text-[11px] border-slate-200 shadow-none focus-visible:ring-1 bg-white text-black font-normal rounded-sm px-2" value={row.kp} onChange={(e) => handleChargeFieldChange(index, 'kp', e.target.value)} /></TableCell>
-                                                                <TableCell className="p-1.5 border-r"><Input readOnly={!isEditing} className="h-8 text-right text-[11px] border-slate-200 shadow-none focus-visible:ring-1 bg-white text-black font-normal rounded-sm px-2" value={row.ec} onChange={(e) => handleChargeFieldChange(index, 'ec', e.target.value)} /></TableCell>
-                                                                <TableCell className="p-1.5 border-r"><Input readOnly={!isEditing} className="h-8 text-right text-[11px] border-slate-200 shadow-none focus-visible:ring-1 bg-white text-black font-normal rounded-sm px-2" value={row.shc} onChange={(e) => handleChargeFieldChange(index, 'shc', e.target.value)} /></TableCell>
-                                                                <TableCell className="p-1.5 border-r"><Input readOnly={!isEditing} className="h-8 text-right text-[11px] border-slate-200 shadow-none focus-visible:ring-1 bg-white text-black font-normal rounded-sm px-2" value={row.other} onChange={(e) => handleChargeFieldChange(index, 'other', e.target.value)} /></TableCell>
-                                                                <TableCell className="p-1.5 border-r"><Input readOnly={!isEditing} className="h-8 text-right text-[11px] border-slate-200 shadow-none focus-visible:ring-1 bg-white text-black font-normal rounded-sm px-2" value={row.dc} onChange={(e) => handleChargeFieldChange(index, 'dc', e.target.value)} /></TableCell>
-                                                                <TableCell className="p-1.5 border-r"><Input readOnly={!isEditing} className="h-8 text-right text-[11px] border-slate-200 shadow-none focus-visible:ring-1 bg-white text-black font-normal rounded-sm px-2" value={row.wc} onChange={(e) => handleChargeFieldChange(index, 'wc', e.target.value)} /></TableCell>
-                                                                <TableCell className="p-1.5 border-r"><Input readOnly={!isEditing} className="h-8 text-right text-[11px] border-slate-200 shadow-none focus-visible:ring-1 bg-white text-black font-normal rounded-sm px-2" value={row.sgt} onChange={(e) => handleChargeFieldChange(index, 'sgt', e.target.value)} /></TableCell>
+                                                                <TableCell className="p-1.5 border-r"><Input readOnly={!isEditing} className="h-8 text-right text-[11px] border-slate-200 shadow-none focus-visible:ring-1 bg-white text-black font-normal rounded-sm px-2" value={formatWithCommas(row.mrc)} onChange={(e) => handleChargeFieldChange(index, 'mrc', e.target.value)} /></TableCell>
+                                                                <TableCell className="p-1.5 border-r"><Input readOnly={!isEditing} className="h-8 text-right text-[11px] border-slate-200 shadow-none focus-visible:ring-1 bg-white text-black font-normal rounded-sm px-2" value={formatWithCommas(row.trc)} onChange={(e) => handleChargeFieldChange(index, 'trc', e.target.value)} /></TableCell>
+                                                                <TableCell className="p-1.5 border-r"><Input readOnly={!isEditing} className="h-8 text-right text-[11px] border-slate-200 shadow-none focus-visible:ring-1 bg-white text-black font-normal rounded-sm px-2" value={formatWithCommas(row.oc1)} onChange={(e) => handleChargeFieldChange(index, 'oc1', e.target.value)} /></TableCell>
+                                                                <TableCell className="p-1.5 border-r"><Input readOnly={!isEditing} className="h-8 text-right text-[11px] border-slate-200 shadow-none focus-visible:ring-1 bg-white text-black font-normal rounded-sm px-2" value={formatWithCommas(row.kp)} onChange={(e) => handleChargeFieldChange(index, 'kp', e.target.value)} /></TableCell>
+                                                                <TableCell className="p-1.5 border-r"><Input readOnly={!isEditing} className="h-8 text-right text-[11px] border-slate-200 shadow-none focus-visible:ring-1 bg-white text-black font-normal rounded-sm px-2" value={formatWithCommas(row.ec)} onChange={(e) => handleChargeFieldChange(index, 'ec', e.target.value)} /></TableCell>
+                                                                <TableCell className="p-1.5 border-r"><Input readOnly={!isEditing} className="h-8 text-right text-[11px] border-slate-200 shadow-none focus-visible:ring-1 bg-white text-black font-normal rounded-sm px-2" value={formatWithCommas(row.shc)} onChange={(e) => handleChargeFieldChange(index, 'shc', e.target.value)} /></TableCell>
+                                                                <TableCell className="p-1.5 border-r"><Input readOnly={!isEditing} className="h-8 text-right text-[11px] border-slate-200 shadow-none focus-visible:ring-1 bg-white text-black font-normal rounded-sm px-2" value={formatWithCommas(row.other)} onChange={(e) => handleChargeFieldChange(index, 'other', e.target.value)} /></TableCell>
+                                                                <TableCell className="p-1.5 border-r"><Input readOnly={!isEditing} className="h-8 text-right text-[11px] border-slate-200 shadow-none focus-visible:ring-1 bg-white text-black font-normal rounded-sm px-2" value={formatWithCommas(row.dc)} onChange={(e) => handleChargeFieldChange(index, 'dc', e.target.value)} /></TableCell>
                                                             </TableRow>
                                                         ))
                                                     )}
@@ -2069,60 +2403,121 @@ export default function EnergyAllotment() {
                                                     <TableHeader className="bg-sidebar">
                                                         <TableRow>
                                                             <TableHead className="py-2 h-10 font-semibold text-white whitespace-nowrap pl-4">Charges</TableHead>
+                                                            <TableHead className="py-2 h-10 font-semibold text-white text-center whitespace-nowrap">Value</TableHead>
                                                             <TableHead className="py-2 h-10 font-semibold text-white whitespace-nowrap">Customer</TableHead>
                                                             <TableHead className="py-2 h-10 font-semibold text-white whitespace-nowrap">Service Number</TableHead>
-                                                            <TableHead className="py-2 h-10 font-semibold text-white text-center whitespace-nowrap pr-4">Value</TableHead>
+                                                            <TableHead className="py-2 h-10 font-semibold text-white text-center whitespace-nowrap pr-4">Allocation</TableHead>
                                                         </TableRow>
                                                     </TableHeader>
                                                     <TableBody>
-                                                        {solarAllocationRows.map((row, index) => (
-                                                            <TableRow key={`${index}-${row.chargeKey}`} className="hover:bg-slate-50 border-b border-slate-100">
-                                                                <TableCell className="py-2 pl-4 pr-3 text-sm text-slate-700 font-medium w-[240px] border-r">
-                                                                    <div className="flex items-center justify-between">
-                                                                        <span>{row.chargeLabel}</span>
-                                                                    </div>
-                                                                </TableCell>
-                                                                <TableCell className="p-1.5 w-[180px] border-r">
-                                                                    <Select
-                                                                        value={row.customer}
-                                                                        onValueChange={(val) => handleSolarCustomerChange(index, val)}
-                                                                    >
-                                                                        <SelectTrigger className="h-8 text-xs border-slate-200 bg-white shadow-none focus:ring-1">
-                                                                            <SelectValue placeholder="Select Customer" />
-                                                                        </SelectTrigger>
-                                                                        <SelectContent>
-                                                                            {customerList.map(cust => (
-                                                                                <SelectItem key={cust} value={cust}>{cust}</SelectItem>
-                                                                            ))}
-                                                                        </SelectContent>
-                                                                    </Select>
-                                                                </TableCell>
-                                                                <TableCell className="p-1.5 w-[180px] border-r">
-                                                                    <Select
-                                                                        value={row.seNumber}
-                                                                        onValueChange={(val) => handleSolarSEChange(index, val)}
-                                                                        disabled={!row.customer}
-                                                                    >
-                                                                        <SelectTrigger className="h-8 text-xs border-slate-200 bg-white shadow-none focus:ring-1">
-                                                                            <SelectValue placeholder="Select SE Number" />
-                                                                        </SelectTrigger>
-                                                                        <SelectContent>
-                                                                            {(customerSEMap[row.customer] || []).map(se => (
-                                                                                <SelectItem key={se} value={se}>{se}</SelectItem>
-                                                                            ))}
-                                                                        </SelectContent>
-                                                                    </Select>
-                                                                </TableCell>
-                                                                <TableCell className="p-1.5 pr-4">
-                                                                    <Input
-                                                                        disabled={!isEditing}
-                                                                        className="h-8 text-center text-xs border-slate-200 shadow-none focus-visible:ring-1 bg-white disabled:bg-white disabled:text-black font-semibold rounded-sm px-2 text-black"
-                                                                        value={row.value || ""}
-                                                                        onChange={(e) => handleSolarFieldChange(index, e.target.value)}
-                                                                    />
-                                                                </TableCell>
-                                                            </TableRow>
-                                                        ))}
+                                                        {solarAllocationRows.map((row, index) => {
+                                                            const isFirstInGroup = solarAllocationRows.findIndex(r => r.chargeCode === row.chargeCode) === index;
+                                                            return (
+                                                                <TableRow key={row.tempId} className="hover:bg-slate-50 border-b border-slate-100">
+                                                                    <TableCell className="py-2 pl-4 pr-3 text-sm text-slate-700 font-medium w-[240px] border-r">
+                                                                        <div className="flex items-start justify-between">
+                                                                            <div className="flex flex-col min-h-[50px]">
+                                                                                <span>{row.chargeLabel}</span>
+                                                                                <div className="flex flex-col mt-0.5">
+                                                                                    {row.systemValue > 0 && (
+                                                                                        <span className="text-[11px] text-slate-500 font-medium">System Total: {row.systemValue}</span>
+                                                                                    )}
+                                                                                    {(() => {
+                                                                                        const totalAllocated = solarAllocationRows
+                                                                                            .filter(r => r.chargeCode === row.chargeCode)
+                                                                                            .reduce((sum, r) => sum + (parseFloat(String(r.value)) || 0), 0);
+                                                                                        const balance = (row.systemValue || 0) - totalAllocated;
+
+                                                                                        return (
+                                                                                            <span className={`text-[11px] font-bold ${balance <= 0 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                                                                                                Balance: {balance.toFixed(2).replace(/\.00$/, "")}
+                                                                                            </span>
+                                                                                        );
+                                                                                    })()}
+                                                                                </div>
+                                                                            </div>
+                                                                            <div className="flex items-center gap-1 mt-0.5">
+                                                                                <Button
+                                                                                    variant="ghost"
+                                                                                    size="icon"
+                                                                                    className="h-6 w-6 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50"
+                                                                                    onClick={() => addSolarSplitRow(index)}
+                                                                                    title="Add customer for this charge"
+                                                                                >
+                                                                                    <Plus className="h-3.5 w-3.5" />
+                                                                                </Button>
+                                                                                {solarAllocationRows.filter(r => r.chargeCode === row.chargeCode).length > 1 && (
+                                                                                    <Button
+                                                                                        variant="ghost"
+                                                                                        size="icon"
+                                                                                        className="h-6 w-6 text-red-500 hover:text-red-600 hover:bg-red-50"
+                                                                                        onClick={() => removeSolarSplitRow(index)}
+                                                                                        title="Remove this allocation"
+                                                                                    >
+                                                                                        <Trash2 className="h-3.5 w-3.5" />
+                                                                                    </Button>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+                                                                    </TableCell>
+                                                                    <TableCell className="p-1.5 border-r text-center">
+                                                                        <span className="text-xs font-medium text-slate-600">
+                                                                            {row.systemValue > 0 ? row.systemValue : ""}
+                                                                        </span>
+                                                                    </TableCell>
+                                                                    <TableCell className="p-1.5 w-[180px] border-r">
+                                                                        <Select
+                                                                            value={row.customer}
+                                                                            onValueChange={(val) => handleSolarCustomerChange(index, val)}
+                                                                        >
+                                                                            <SelectTrigger className="h-8 text-xs border-slate-200 bg-white shadow-none focus:ring-1">
+                                                                                <SelectValue placeholder="Select Customer" />
+                                                                            </SelectTrigger>
+                                                                            <SelectContent>
+                                                                                {customerList.map(cust => (
+                                                                                    <SelectItem key={cust} value={cust}>{cust}</SelectItem>
+                                                                                ))}
+                                                                            </SelectContent>
+                                                                        </Select>
+                                                                    </TableCell>
+                                                                    <TableCell className="p-1.5 w-[180px] border-r">
+                                                                        <Select
+                                                                            value={row.seNumber}
+                                                                            onValueChange={(val) => handleSolarSEChange(index, val)}
+                                                                            disabled={!row.customer}
+                                                                        >
+                                                                            <SelectTrigger className="h-8 text-xs border-slate-200 bg-white shadow-none focus:ring-1">
+                                                                                <SelectValue placeholder="Select SE Number" />
+                                                                            </SelectTrigger>
+                                                                            <SelectContent>
+                                                                                {(customerSEMap[row.customer] || [])
+                                                                                    .filter(se => {
+                                                                                        // Only show SE numbers not already used for THIS specific charge code
+                                                                                        if (se === row.seNumber) return true;
+                                                                                        const isUsed = solarAllocationRows.some(r => 
+                                                                                            r.chargeCode === row.chargeCode && 
+                                                                                            r.customer === row.customer && 
+                                                                                            r.seNumber === se
+                                                                                        );
+                                                                                        return !isUsed;
+                                                                                    })
+                                                                                    .map(se => (
+                                                                                        <SelectItem key={se} value={se}>{se}</SelectItem>
+                                                                                    ))}
+                                                                            </SelectContent>
+                                                                        </Select>
+                                                                    </TableCell>
+                                                                    <TableCell className="p-1.5 pr-4">
+                                                                        <Input
+                                                                            className="h-8 text-center text-xs border-slate-200 shadow-none focus-visible:ring-1 bg-white font-semibold rounded-sm px-2 text-black"
+                                                                            value={row.value === 0 ? "" : formatWithCommas(row.value)}
+                                                                            onChange={(e) => handleSolarFieldChange(index, e.target.value)}
+                                                                            placeholder="0"
+                                                                        />
+                                                                    </TableCell>
+                                                                </TableRow>
+                                                            );
+                                                        })}
                                                     </TableBody>
                                                 </Table>
                                             </div>
@@ -2184,3 +2579,5 @@ export default function EnergyAllotment() {
         </ErrorBoundary>
     );
 }
+
+export default EnergyAllotment;

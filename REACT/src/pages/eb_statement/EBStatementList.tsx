@@ -28,6 +28,7 @@ interface EBStatement {
     month: string;
     year: number;
     windmill_number: string;
+    windmill_name?: string;
     pdf: string;
     is_submitted: number;
     submitted_time: string;
@@ -214,7 +215,8 @@ export default function EBStatementList() {
                                         <TableHead className="font-semibold text-white h-10 whitespace-nowrap w-1/6">Year</TableHead>
                                         <TableHead className="font-semibold text-white h-10 whitespace-nowrap w-1/6">Month</TableHead>
                                         <TableHead className="font-semibold text-white h-10 whitespace-nowrap w-1/6">Windmill Number</TableHead>
-                                        <TableHead className="font-semibold text-white h-10 whitespace-nowrap text-center w-1/6">PDF</TableHead>
+                                        <TableHead className="font-semibold text-white h-10 whitespace-nowrap w-1/6">Windmill Name</TableHead>
+                                        <TableHead className="font-semibold text-white h-10 whitespace-nowrap text-center w-1/12">PDF</TableHead>
                                         <TableHead className="font-semibold text-white h-10 whitespace-nowrap w-1/6">Submitted Date and Time</TableHead>
                                         <TableHead className="font-semibold text-white h-10 whitespace-nowrap w-1/6">Submitted By</TableHead>
                                     </TableRow>
@@ -222,17 +224,18 @@ export default function EBStatementList() {
                                 <TableBody>
                                     {loading ? (
                                         <TableRow>
-                                            <TableCell colSpan={6} className="text-center py-10 text-slate-500">
+                                            <TableCell colSpan={7} className="text-center py-10 text-slate-500">
                                                 Loading EB Statements...
                                             </TableCell>
                                         </TableRow>
                                     ) : statements.length > 0 ? (
                                         statements.map((row) => (
                                             <TableRow key={row.id} className="hover:bg-slate-50">
-                                                <TableCell className="py-2 text-sm w-1/6">{row.submitted_time ? format(new Date(row.submitted_time), "yyyy") : "-"}</TableCell>
+                                                <TableCell className="py-2 text-sm w-1/6">{row.year || "-"}</TableCell>
                                                 <TableCell className="py-2 text-sm w-1/6">{row.month}</TableCell>
                                                 <TableCell className="py-2 text-sm w-1/6">{row.windmill_number}</TableCell>
-                                                <TableCell className="py-2 text-center w-1/6">
+                                                <TableCell className="py-2 text-sm w-1/6 font-semibold">{row.windmill_name || "N/A"}</TableCell>
+                                                <TableCell className="py-2 text-center w-1/12">
                                                     <Button 
                                                         variant="ghost" 
                                                         size="icon" 
@@ -255,7 +258,7 @@ export default function EBStatementList() {
                                         ))
                                     ) : (
                                         <TableRow>
-                                            <TableCell colSpan={6} className="text-center py-10 text-slate-500">
+                                            <TableCell colSpan={7} className="text-center py-10 text-slate-500">
                                                 No EB Statements found.
                                             </TableCell>
                                         </TableRow>

@@ -40,6 +40,7 @@ class DailyGenerationResponse(BaseModel):
     is_submitted: int
     created_by: str
     created_at: datetime
+    windmill_name: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -67,20 +68,11 @@ def get_generation(
     keyword: str | None = None,
     db: Session = Depends(get_db)
 ):
-    query = db.query(DailyGeneration)
-
-    if from_date and to_date:
-        query = query.filter(
-            func.date(DailyGeneration.created_at) >= from_date,
-            func.date(DailyGeneration.created_at) <= to_date
-        )
-
-    if keyword:
-        query = query.filter(
-            DailyGeneration.windmill_number.ilike(f"%{keyword}%")
-        )
-
-    return query.all()
+    result = db.execute(
+        text("CALL windmill.sp_get_generation(:from_date, :to_date, :keyword)"),
+        {"from_date": from_date, "to_date": to_date, "keyword": keyword}
+    )
+    return [dict(row._mapping) for row in result]
 
 
 

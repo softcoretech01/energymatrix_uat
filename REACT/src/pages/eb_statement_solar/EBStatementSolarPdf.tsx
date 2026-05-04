@@ -26,6 +26,7 @@ type SolarStatementData = {
     charges?: SolarCharge[];
     month?: string | number;
     year?: string | number;
+    system_net?: string | number;
 };
 
 export default function EBStatementSolarPdf() {
@@ -315,6 +316,7 @@ export default function EBStatementSolarPdf() {
                                     <TableHead className="font-bold text-center">C4</TableHead>
                                     <TableHead className="font-bold text-center">C5</TableHead>
                                     <TableHead className="font-bold text-right pr-4">Total Net</TableHead>
+                                    <TableHead className="font-bold text-right pr-4">System Net</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -324,6 +326,16 @@ export default function EBStatementSolarPdf() {
                                     <TableCell className="text-center font-medium">{data.slots?.C4 || "0"}</TableCell>
                                     <TableCell className="text-center font-medium">{data.slots?.C5 || "0"}</TableCell>
                                     <TableCell className="text-right pr-4 font-bold text-green-700">{totalNet()}</TableCell>
+                                    {(() => {
+                                        const tNet = parseNumber(data.slots?.C1) + parseNumber(data.slots?.C2) + parseNumber(data.slots?.C4) + parseNumber(data.slots?.C5);
+                                        const sNet = parseNumber(data.system_net);
+                                        const isDiff = Math.abs(tNet - sNet) > 0.1;
+                                        return (
+                                            <TableCell className={`text-right pr-4 font-bold ${isDiff ? 'text-red-600' : 'text-green-700'}`}>
+                                                {sNet.toLocaleString()}
+                                            </TableCell>
+                                        );
+                                    })()}
                                 </TableRow>
                             </TableBody>
                         </Table>

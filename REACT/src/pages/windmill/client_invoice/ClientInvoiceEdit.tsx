@@ -66,7 +66,21 @@ export default function ClientInvoiceEdit() {
     const handleSave = async () => {
         setSaving(true);
         try {
-            await api.put(`/invoices/${invoice_id}/details`, { details });
+            const payload = {
+                details,
+                delivery_note: invoice.delivery_note,
+                mode_terms_of_payment: invoice.mode_terms_of_payment,
+                reference_no_date: invoice.reference_no_date,
+                other_references: invoice.other_references,
+                buyers_order_no: invoice.buyers_order_no,
+                buyers_order_date: invoice.buyers_order_date,
+                dispatch_doc_no: invoice.dispatch_doc_no,
+                delivery_note_date: invoice.delivery_note_date,
+                dispatched_through: invoice.dispatched_through,
+                destination: invoice.destination,
+                terms_of_delivery: invoice.terms_of_delivery
+            };
+            await api.put(`/invoices/${invoice_id}/details`, payload);
             toast.success("Invoice updated successfully!");
             navigate(`/windmill/client-invoice/pdf/${invoice_id}`);
         } catch (err) {
@@ -88,11 +102,16 @@ export default function ClientInvoiceEdit() {
     if (!invoice) return <div className="p-8 text-center text-red-500">Invoice not found.</div>;
 
     // Mapping for UI
-    const dMap: Record<string, number> = {};
-    details.forEach(d => dMap[d.field_name] = Number(d.amount));
+    const dMap: Record<string, {amount: number, calculation?: string}> = {};
+    details.forEach(d => {
+        dMap[d.field_name] = { 
+            amount: Number(d.amount), 
+            calculation: d.calculation 
+        };
+    });
 
-    const units = dMap["Units"] || 0;
-    const rate = dMap["Rate"] || 0;
+    const units = dMap["Units"]?.amount || 0;
+    const rate = dMap["Rate"]?.amount || 0;
     const energyAmount = units * rate;
 
     const chargesKeys = [
@@ -100,7 +119,7 @@ export default function ClientInvoiceEdit() {
         "RkvAh", "Import Chrgs", "Scheduling chrgs", "DSM Charges",
         "Wheeling", "Selfenergy chrgs"
     ];
-    const totalCharges = chargesKeys.reduce((sum, key) => sum + (dMap[key] || 0), 0);
+    const totalCharges = chargesKeys.reduce((sum, key) => sum + (dMap[key]?.amount || 0), 0);
     const finalTotal = energyAmount - totalCharges;
 
     return (
@@ -153,6 +172,114 @@ export default function ClientInvoiceEdit() {
                         </div>
                     </div>
                 </div>
+                
+                {/* Delivery and Terms Section (New Fields) */}
+                <div className="grid grid-cols-2 border-b border-gray-400">
+                    <div className="border-r border-gray-400 p-2 space-y-2">
+                        <div className="flex flex-col">
+                            <label className="text-[9px] font-bold text-slate-500 uppercase">Delivery Note</label>
+                            <Input 
+                                value={invoice.delivery_note || ""} 
+                                onChange={(e) => setInvoice({...invoice, delivery_note: e.target.value})}
+                                className="h-7 text-[10px] border-slate-200"
+                            />
+                        </div>
+                        <div className="flex flex-col">
+                            <label className="text-[9px] font-bold text-slate-500 uppercase">Reference No. & Date.</label>
+                            <Input 
+                                value={invoice.reference_no_date || ""} 
+                                onChange={(e) => setInvoice({...invoice, reference_no_date: e.target.value})}
+                                className="h-7 text-[10px] border-slate-200"
+                            />
+                        </div>
+                        <div className="flex flex-col">
+                            <label className="text-[9px] font-bold text-slate-500 uppercase">Buyer's Order No.</label>
+                            <Input 
+                                value={invoice.buyers_order_no || ""} 
+                                onChange={(e) => setInvoice({...invoice, buyers_order_no: e.target.value})}
+                                className="h-7 text-[10px] border-slate-200"
+                            />
+                        </div>
+                    </div>
+                    <div className="p-2 space-y-2">
+                        <div className="flex flex-col">
+                            <label className="text-[9px] font-bold text-slate-500 uppercase">Mode/Terms of Payment</label>
+                            <Input 
+                                value={invoice.mode_terms_of_payment || ""} 
+                                onChange={(e) => setInvoice({...invoice, mode_terms_of_payment: e.target.value})}
+                                className="h-7 text-[10px] border-slate-200"
+                            />
+                        </div>
+                        <div className="flex flex-col">
+                            <label className="text-[9px] font-bold text-slate-500 uppercase">Other References</label>
+                            <Input 
+                                value={invoice.other_references || ""} 
+                                onChange={(e) => setInvoice({...invoice, other_references: e.target.value})}
+                                className="h-7 text-[10px] border-slate-200"
+                            />
+                        </div>
+                        <div className="flex flex-col">
+                            <label className="text-[9px] font-bold text-slate-500 uppercase">Dated</label>
+                            <Input 
+                                type="date"
+                                value={invoice.buyers_order_date || ""} 
+                                onChange={(e) => setInvoice({...invoice, buyers_order_date: e.target.value})}
+                                className="h-7 text-[10px] border-slate-200"
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-2 border-b border-gray-400">
+                    <div className="border-r border-gray-400 p-2 space-y-2">
+                        <div className="flex flex-col">
+                            <label className="text-[9px] font-bold text-slate-500 uppercase">Dispatch Doc No.</label>
+                            <Input 
+                                value={invoice.dispatch_doc_no || ""} 
+                                onChange={(e) => setInvoice({...invoice, dispatch_doc_no: e.target.value})}
+                                className="h-7 text-[10px] border-slate-200"
+                            />
+                        </div>
+                        <div className="flex flex-col">
+                            <label className="text-[9px] font-bold text-slate-500 uppercase">Dispatched through</label>
+                            <Input 
+                                value={invoice.dispatched_through || ""} 
+                                onChange={(e) => setInvoice({...invoice, dispatched_through: e.target.value})}
+                                className="h-7 text-[10px] border-slate-200"
+                            />
+                        </div>
+                    </div>
+                    <div className="p-2 space-y-2">
+                        <div className="flex flex-col">
+                            <label className="text-[9px] font-bold text-slate-500 uppercase">Delivery Note Date</label>
+                            <Input 
+                                type="date"
+                                value={invoice.delivery_note_date || ""} 
+                                onChange={(e) => setInvoice({...invoice, delivery_note_date: e.target.value})}
+                                className="h-7 text-[10px] border-slate-200"
+                            />
+                        </div>
+                        <div className="flex flex-col">
+                            <label className="text-[9px] font-bold text-slate-500 uppercase">Destination</label>
+                            <Input 
+                                value={invoice.destination || ""} 
+                                onChange={(e) => setInvoice({...invoice, destination: e.target.value})}
+                                className="h-7 text-[10px] border-slate-200"
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                <div className="p-2 border-b border-gray-400">
+                    <div className="flex flex-col">
+                        <label className="text-[9px] font-bold text-slate-500 uppercase">Terms of Delivery</label>
+                        <Input 
+                            value={invoice.terms_of_delivery || ""} 
+                            onChange={(e) => setInvoice({...invoice, terms_of_delivery: e.target.value})}
+                            className="h-7 text-[10px] border-slate-200"
+                        />
+                    </div>
+                </div>
 
                 {/* Editable Fields Table */}
                 <table className="w-full border-collapse">
@@ -172,7 +299,7 @@ export default function ClientInvoiceEdit() {
                                         <label className="text-[9px] font-bold text-slate-500 uppercase">Generated Units</label>
                                         <Input 
                                             type="number" 
-                                            value={dMap["Units"]} 
+                                            value={dMap["Units"]?.amount} 
                                             onChange={(e) => handleAmountChange("Units", e.target.value)}
                                             className="h-8 text-xs border-slate-300 focus:ring-indigo-500"
                                         />
@@ -182,7 +309,7 @@ export default function ClientInvoiceEdit() {
                                         <Input 
                                             type="number" 
                                             step="0.01"
-                                            value={dMap["Rate"]} 
+                                            value={dMap["Rate"]?.amount} 
                                             onChange={(e) => handleAmountChange("Rate", e.target.value)}
                                             className="h-8 text-xs border-slate-300 focus:ring-indigo-500"
                                         />
@@ -199,8 +326,8 @@ export default function ClientInvoiceEdit() {
 
                         {/* Charges Section */}
                         {chargesKeys.map((key, idx) => (
-                            <tr key={key} className={idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
-                                <td className="p-3 border-r border-slate-200 flex items-center justify-between">
+                            <tr key={key} title={dMap[key]?.calculation} className={idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
+                                <td className="p-3 border-r border-slate-200 flex items-center justify-between cursor-help">
                                     <span className="font-medium text-slate-700">{key}</span>
                                     <span className="text-slate-400 text-[9px] font-bold">DEDUCTION (-)</span>
                                 </td>
@@ -208,7 +335,7 @@ export default function ClientInvoiceEdit() {
                                     <Input 
                                         type="number" 
                                         step="0.01"
-                                        value={dMap[key]} 
+                                        value={dMap[key]?.amount} 
                                         onChange={(e) => handleAmountChange(key, e.target.value)}
                                         className="h-8 text-xs border-slate-300 text-right font-semibold text-red-600 focus:ring-red-500"
                                     />

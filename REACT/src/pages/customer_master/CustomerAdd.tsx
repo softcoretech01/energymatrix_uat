@@ -32,6 +32,7 @@ export default function CustomerAdd() {
     const [email, setEmail] = useState("");
     const [address, setAddress] = useState("");
     const [gstNumber, setGstNumber] = useState("");
+    const [status, setStatus] = useState("active");
 
     // SE Number State
     const [seNumbers, setSeNumbers] = useState<{ id: number; seNumber: string; kva: string; edcCircle: number; remarks: string; status: string }[]>([]);
@@ -94,6 +95,7 @@ export default function CustomerAdd() {
 
     // Agreed Units State
     const [totalAgreedUnits, setTotalAgreedUnits] = useState<string>("");
+    const [ratePerUnit, setRatePerUnit] = useState<string>("");
     const [unitAllocation, setUnitAllocation] = useState(
         ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(month => ({
             month,
@@ -208,7 +210,7 @@ export default function CustomerAdd() {
             phone_no: phoneNo,
             address,
             gst_number: gstNumber,
-            status: 1,
+            status: status === "active" ? 1 : 0,
             is_submitted: 0,
         };
         if (email) {
@@ -424,6 +426,7 @@ export default function CustomerAdd() {
                 },
                 body: JSON.stringify({
                     total_agreed_units: totalAgreedUnits,
+                    rate_per_unit: ratePerUnit,
                     unit_allocation: unitAllocation
                 }),
             });
@@ -682,6 +685,18 @@ export default function CustomerAdd() {
                                             className="bg-white border-slate-300 h-10 text-sm focus:ring-blue-500"
                                         />
                                     </div>
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-semibold text-slate-700">Status</label>
+                                        <Select value={status} onValueChange={setStatus}>
+                                            <SelectTrigger className="bg-white border-slate-300 h-10 text-sm focus:ring-blue-500">
+                                                <SelectValue placeholder="Select Status" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="active">Active</SelectItem>
+                                                <SelectItem value="inactive">Inactive</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
 
                                 </div>
                             </TabsContent>
@@ -927,15 +942,28 @@ export default function CustomerAdd() {
                             <TabsContent value="agreed_units" className="mt-0 space-y-6 pt-2">
                                 <div className="space-y-6 max-w-5xl">
                                     <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
-                                        <div className="space-y-2 max-w-xs">
-                                            <label className="text-sm font-semibold text-slate-700">Total Agreed Units</label>
-                                            <Input
-                                                type="number"
-                                                value={totalAgreedUnits}
-                                                onChange={(e) => setTotalAgreedUnits(e.target.value)}
-                                                placeholder="Enter Total Agreed Units"
-                                                className="bg-white border-slate-300 h-10 text-sm focus:ring-blue-500"
-                                            />
+                                        <div className="flex flex-wrap gap-6">
+                                            <div className="space-y-2 max-w-xs">
+                                                <label className="text-sm font-semibold text-slate-700">Total Agreed Units</label>
+                                                <Input
+                                                    type="number"
+                                                    value={totalAgreedUnits}
+                                                    onChange={(e) => setTotalAgreedUnits(e.target.value)}
+                                                    placeholder="Enter Total Agreed Units"
+                                                    className="bg-white border-slate-300 h-10 text-sm focus:ring-blue-500 w-48"
+                                                />
+                                            </div>
+                                            <div className="space-y-2 max-w-xs">
+                                                <label className="text-sm font-semibold text-slate-700">Rate per unit</label>
+                                                <Input
+                                                    type="number"
+                                                    value={ratePerUnit}
+                                                    onChange={(e) => setRatePerUnit(e.target.value)}
+                                                    placeholder="0.00"
+                                                    step="0.01"
+                                                    className="bg-white border-slate-300 h-10 text-sm focus:ring-blue-500 w-48"
+                                                />
+                                            </div>
                                         </div>
                                     </div>
 

@@ -15,6 +15,7 @@ class Actual(Base):
     actual_year = Column(Integer)   # year
     actual_month = Column(SmallInteger) # tinyint
     pdf_file_path = Column(String(255))
+    self_gen_tax = Column(DECIMAL(12, 2), default=0.00)
     
     created_by = Column(Integer)
     created_at = Column(DateTime)
@@ -295,6 +296,19 @@ class ClientInvoice(Base):
     month = Column(String(20), nullable=False)
     invoice_date = Column(Date, nullable=False)         # Date when generated/printed
     amount = Column(DECIMAL(15, 2), default=0.00)
+
+    # New fields
+    delivery_note = Column(String(255))
+    mode_terms_of_payment = Column(String(255))
+    reference_no_date = Column(String(255))
+    other_references = Column(String(255))
+    buyers_order_no = Column(String(255))
+    buyers_order_date = Column(Date)
+    dispatch_doc_no = Column(String(255))
+    delivery_note_date = Column(Date)
+    dispatched_through = Column(String(255))
+    destination = Column(String(255))
+    terms_of_delivery = Column(Text)
 
     # Audit fields
     created_by = Column(Integer)

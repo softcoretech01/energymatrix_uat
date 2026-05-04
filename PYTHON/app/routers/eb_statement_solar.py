@@ -14,7 +14,7 @@ from app.schemas.eb_solar_schema import (
     EBSolarSaveRequest
 )
 from app.database import get_connection, DB_NAME_WINDMILL
-from app.routers.eb_statement_upload import extract_eb_statement_data
+from app.routers.eb_statement_upload import extract_eb_statement_data, get_system_net
 import csv
 import io
 import pymysql
@@ -303,13 +303,15 @@ def search_eb_solar(
             try:
                 cursor.callproc("masters.sp_get_windmill_numbers_by_ids", (",".join(map(str, solar_ids)),))
                 for row in cursor.fetchall():
-                    solar_map[row[0]] = row[1]
+                    solar_map[row[0]] = {"number": row[1], "name": row[2]}
             except Exception as e:
                 print(f"Warning: Could not fetch solar numbers for items: {e}")
         
         # Normalize items
         for item in items:
-            item["solar_number"] = solar_map.get(item.get('solar_id'), item.get('solar_id'))
+            mapping = solar_map.get(item.get('solar_id'), {})
+            item["solar_number"] = mapping.get("number", item.get('solar_id'))
+            item["windmill_name"] = mapping.get("name", item.get('windmill_name', "N/A"))
             item["month"] = _normalize_month_value(item.get("month"))
             
             if "submitted_time" in item and item["submitted_time"]:
@@ -395,13 +397,15 @@ def get_all_eb_solar(
             try:
                 cursor.callproc("masters.sp_get_windmill_numbers_by_ids", (",".join(map(str, solar_ids)),))
                 for row in cursor.fetchall():
-                    solar_map[row[0]] = row[1]
+                    solar_map[row[0]] = {"number": row[1], "name": row[2]}
             except Exception as e:
                 print(f"Warning: Could not fetch solar numbers: {e}")
         
-        # Add solar_number to items
+        # Add solar_number and windmill_name to items
         for item in items:
-            item["solar_number"] = solar_map.get(item.get('solar_id'), item.get('solar_id'))
+            mapping = solar_map.get(item.get('solar_id'), {})
+            item["solar_number"] = mapping.get("number", item.get('solar_id'))
+            item["windmill_name"] = mapping.get("name", item.get('windmill_name', "N/A"))
 
         for item in items:
             item["month"] = _normalize_month_value(item.get("month"))
@@ -468,10 +472,24 @@ async def get_eb_statement_solar_details(eb_header_id: int):
             for row in cursor.fetchall()
         ]
 
+        # Fetch header info for system_net
+        query = "SELECT solar_id, month, year FROM solar.eb_statement_solar WHERE id = %s"
+        cursor.execute(query, (eb_header_id,))
+        info = cursor.fetchone()
+        system_net = 0
+        if info:
+            s_id, m_name, y_val = info
+            cursor.callproc("masters.sp_get_windmill_number_by_id_or_val", (str(s_id),))
+            wm_num_row = cursor.fetchone()
+            while cursor.nextset(): pass
+            wm_num = wm_num_row[0] if wm_num_row else str(s_id)
+            system_net = get_system_net(cursor, wm_num, m_name, y_val)
+
         return {
             "status": "success",
             "details": details,
             "charges": charges,
+            "system_net": system_net
         }
     finally:
         cursor.close()
@@ -733,6 +751,12 @@ async def read_eb_statement_solar_metadata(filename: str, user: dict = Depends(g
                 warning_text = parsed_data.get("warning") if "warning" in parsed_data else None
         except Exception as parse_exc:
             print("Failed to parse EB statement metadata (read-metadata):", parse_exc)
+
+        # Add system_net calculation
+        if isinstance(parsed_data, dict) and parsed_data.get("month") and parsed_data.get("year"):
+            parsed_data["system_net"] = get_system_net(cursor, master_wm, parsed_data["month"], parsed_data["year"])
+        elif isinstance(parsed_data, dict):
+            parsed_data["system_net"] = 0
 
         return {
             "status": "success",

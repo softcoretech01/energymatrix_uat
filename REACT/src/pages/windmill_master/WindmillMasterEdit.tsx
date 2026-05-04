@@ -42,6 +42,7 @@ export default function WindmillMasterEdit() {
     const [windmillName, setWindmillName] = useState("");
     const [status, setStatus] = useState("Active");
     const [operatorName, setOperatorName] = useState("");
+    const [operatorNumber, setOperatorNumber] = useState("");
     const [contactNumber, setContactNumber] = useState("");
     const [aeNumber, setAeNumber] = useState("");
     const [aeName, setAeName] = useState("");
@@ -174,7 +175,8 @@ export default function WindmillMasterEdit() {
                 setWindmillName(data.windmill_name || "");
                 setStatus(data.status || "Active");
                 setOperatorName(data.operator_name || "");
-                setContactNumber(data.contact_number || data.operator_number || "");
+                setOperatorNumber(data.operator_number || "");
+                setContactNumber(data.contact_number || "");
                 setAeNumber(data.ae_number || "");
                 setAeName(data.ae_name || data.am_name || "");
                 setKvaId(data.kva_id ? String(data.kva_id) : data.kva ? String(data.kva) : "");
@@ -372,8 +374,8 @@ export default function WindmillMasterEdit() {
             windmill_name: safeString(windmillName),
             status: safeString(status),
             operator_name: safeString(operatorName),
+            operator_number: safeString(operatorNumber),
             contact_number: safeString(contactNumber),
-            operator_number: safeString(contactNumber),
             ae_number: safeString(aeNumber),
             ae_name: safeString(aeName),
             kva_id: kvaId ? parseInt(kvaId, 10) : undefined,
@@ -721,8 +723,18 @@ export default function WindmillMasterEdit() {
                                                 className="bg-white border-slate-300 h-9 text-xs"
                                             />
                                         </div>
-                                        <div className="space-y-1.5">
+                                         <div className="space-y-1.5">
                                             <label className="text-sm font-semibold text-slate-700">Operator Number</label>
+                                            <Input
+                                                value={operatorNumber}
+                                                onChange={(e) => setOperatorNumber(e.target.value)}
+                                                placeholder="Enter Operator Number"
+                                                disabled={isReadOnly}
+                                                className="bg-white border-slate-300 h-9 text-xs"
+                                            />
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <label className="text-sm font-semibold text-slate-700">Contact Number</label>
                                             <Input
                                                 value={contactNumber}
                                                 onChange={(e) => setContactNumber(e.target.value)}

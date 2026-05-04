@@ -319,8 +319,10 @@ export default function WindmillMasterList() {
                                 <TableHeader className="bg-sidebar">
                                     <TableRow>
                                         <TableHead className="py-2 h-10 font-semibold text-white whitespace-nowrap">WM Number</TableHead>
+                                        <TableHead className="py-2 h-10 font-semibold text-white whitespace-nowrap">Windmill Name</TableHead>
                                         <TableHead className="py-2 h-10 font-semibold text-white whitespace-nowrap">Operator</TableHead>
-                                    <TableHead className="py-2 h-10 font-semibold text-white whitespace-nowrap">Type</TableHead>
+                                        <TableHead className="py-2 h-10 font-semibold text-white whitespace-nowrap">Operator Number</TableHead>
+                                        <TableHead className="py-2 h-10 font-semibold text-white whitespace-nowrap">Type</TableHead>
                                         <TableHead className="py-2 h-10 font-semibold text-white whitespace-nowrap">Region</TableHead>
                                         <TableHead className="py-2 h-10 font-semibold text-white whitespace-nowrap">Status</TableHead>
                                         <TableHead className="py-2 h-10 font-semibold text-white text-center whitespace-nowrap">Action</TableHead>
@@ -329,7 +331,7 @@ export default function WindmillMasterList() {
                                 <TableBody>
                                     {loading ? (
                                         <TableRow>
-                                            <TableCell colSpan={6} className="text-center py-8 text-slate-500">
+                                            <TableCell colSpan={8} className="text-center py-8 text-slate-500">
                                                 <div className="flex flex-col items-center gap-2">
                                                     <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-slate-400"></div>
                                                     <span>Loading windmills...</span>
@@ -338,7 +340,7 @@ export default function WindmillMasterList() {
                                         </TableRow>
                                     ) : error ? (
                                         <TableRow>
-                                            <TableCell colSpan={6} className="text-center py-8 text-red-500">
+                                            <TableCell colSpan={8} className="text-center py-8 text-red-500">
                                                 {error}
                                             </TableCell>
                                         </TableRow>
@@ -346,7 +348,9 @@ export default function WindmillMasterList() {
                                         filteredData.map((row, index) => (
                                             <TableRow key={index} className="hover:bg-slate-50 bg-white">
                                                 <TableCell className="py-2 text-slate-600 font-medium text-sm">{row.windmill_number}</TableCell>
-                                                <TableCell className="py-2 text-slate-600 text-sm">{row.operator_name || row.operator}</TableCell>
+                                                <TableCell className="py-2 text-slate-600 text-sm font-semibold">{row.windmill_name || "N/A"}</TableCell>
+                                                <TableCell className="py-2 text-slate-600 text-sm">{row.operator_name || row.operator || "-"}</TableCell>
+                                                <TableCell className="py-2 text-slate-600 text-sm">{row.operator_number || "-"}</TableCell>
                                                 <TableCell className="py-2 text-slate-600 text-sm">{row.type ?? row.windmill_type ?? row.windmill_capacity ?? row.kva_capacity ?? row.capacity ?? ""}</TableCell>
                                                 <TableCell className="py-2 text-slate-600 text-sm">{row.edc_name || row.region}</TableCell>
                                                 <TableCell className="py-2">

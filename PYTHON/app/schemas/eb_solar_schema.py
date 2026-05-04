@@ -55,6 +55,7 @@ class EBSolarRecord(BaseModel):
     is_submitted: Optional[int] = None
     year: Optional[int] = None
     month: Optional[str] = None
+    windmill_name: Optional[str] = None
     submitted_time: Optional[str] = None
     submitted_by: Optional[str] = None
 

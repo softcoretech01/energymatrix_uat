@@ -54,7 +54,7 @@ async def get_actuals_pdf(client_eb_id: int):
             "sc_number": first["sc_number"],
             "month": first["actual_month"],
             "year": first["actual_year"],
-            "self_generation_tax": float(first["self_generation_tax"]),
+            "self_gen_tax": float(first["self_gen_tax"]) if first.get("self_gen_tax") is not None else 0.0,
             
         }
 

@@ -217,6 +217,27 @@ def extract_eb_statement_data(pdf_path, expected_windmill_no, expected_year=None
         data["year"] = expected_year
 
     return data
+    
+def get_system_net(cursor, windmill_number, month_name, year):
+    month_map = {
+        "January": 1, "February": 2, "March": 3, "April": 4, "May": 5, "June": 6,
+        "July": 7, "August": 8, "September": 9, "October": 10, "November": 11, "December": 12
+    }
+    month_num = month_map.get(month_name)
+    if not month_num:
+        return 0
+    
+    query = """
+        SELECT SUM(units) 
+        FROM windmill.windmill_daily_transaction 
+        WHERE TRIM(windmill_number) = %s 
+        AND YEAR(transaction_date) = %s 
+        AND MONTH(transaction_date) = %s
+    """
+    cursor.execute(query, (str(windmill_number).strip(), year, month_num))
+    result = cursor.fetchone()
+    return float(result[0]) if result and result[0] is not None else 0
+
 
 
 
@@ -317,23 +338,28 @@ async def get_eb_statement_list(
     keyword: Optional[str] = None
 ):
     conn = get_connection(db_name=DB_NAME_WINDMILL)
-    cursor = conn.cursor()
+    # Handle "all" filters
+    if windmill_number == "all": windmill_number = None
+    if year == 0 or year == "all": year = None
+    if month == "all": month = None
 
     try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
         cursor.callproc("windmill.sp_get_eb_statement_list", (windmill_number, year, month))
         result = cursor.fetchall()
 
         data = []
         for row in result:
             data.append({
-                "id": row[0],
-                "month": row[1],
-                "year": row[2],
-                "windmill_number": row[3],
-                "pdf": row[4],
-                "is_submitted": row[5],
-                "submitted_time": row[6],
-                "submitted_by": row[7]
+                "id": row["id"],
+                "month": row["month"],
+                "year": row["year"],
+                "windmill_number": row["windmill_number"],
+                "windmill_name": row["windmill_name"],
+                "pdf": row["pdf_file_path"],
+                "is_submitted": row["is_submitted"],
+                "submitted_time": row["submitted_time"],
+                "submitted_by": row["submitted_by"]
             })
 
         return {
@@ -399,6 +425,12 @@ async def read_eb_statement_metadata(filename: str, user: dict = Depends(get_cur
         if isinstance(parsed_data, dict):
             if db_month: parsed_data["month"] = db_month
             if db_year: parsed_data["year"] = db_year
+            
+            # Add system_net calculation
+            if parsed_data.get("month") and parsed_data.get("year"):
+                parsed_data["system_net"] = get_system_net(cursor, expected_wm_no, parsed_data["month"], parsed_data["year"])
+            else:
+                parsed_data["system_net"] = 0
 
         return {
             "status": "success",
@@ -449,13 +481,29 @@ async def get_eb_statement_details(header_id: int, user: dict = Depends(get_curr
                 "code": row[4] if row[4] else None
             })
 
+        # 4. Fetch header info for system_net
+        cursor.callproc("windmill.sp_get_eb_statement_info", (header_id,))
+        info = cursor.fetchone()
+        while cursor.nextset(): pass
+        
+        system_net = 0
+        if info:
+            # windmill_id, month_name, year
+            w_id, m_name, y_val = info[0], info[1], info[2]
+            cursor.callproc("masters.sp_get_windmill_number_by_id_or_val", (str(w_id),))
+            wm_num_row = cursor.fetchone()
+            while cursor.nextset(): pass
+            wm_num = wm_num_row[0] if wm_num_row else str(w_id)
+            system_net = get_system_net(cursor, wm_num, m_name, y_val)
+
         return {
             "status": "success",
             "data": {
                 "slots": slots,
                 "banking_slots": banking_slots,
                 "banking_units": banking_units,
-                "charges": charges
+                "charges": charges,
+                "system_net": system_net
             }
         }
     except Exception as e:
@@ -769,23 +817,15 @@ async def get_eb_statement_summary_by_month(
     current_month_num_str_pad = current_month_num_str.zfill(2)
     current_year = year
 
-    # Previous month details
-    prev_month_int = month_int - 1
-    prev_year = year
-    if prev_month_int == 0:
-        prev_month_int = 12
-        prev_year -= 1
-    prev_month_name = month_names.get(str(prev_month_int))
-    prev_month_num_str = str(prev_month_int)
-    prev_month_num_str_pad = prev_month_num_str.zfill(2)
+    # Current month details
+    current_month_name = db_month
+    current_month_num_str = str(month)
+    current_month_num_str_pad = current_month_num_str.zfill(2)
 
     conn = get_connection(db_name=DB_NAME_WINDMILL)
     cursor = conn.cursor()
     try:
-        # Fetch P/B values directly from EB Statements (Windmill and Solar).
-        # The user requested that for a given month (e.g., March), values MUST come from 
-        # the previous month's actual generation (e.g., February). 
-        # If previous month data is missing, it should be 0.
+        # Fetch P/B values directly from EB Statements (Windmill and Solar) for the SELECTED month.
         query = """
             SELECT 
                 TRIM(mw.windmill_number) as windmill_number,
@@ -816,10 +856,10 @@ async def get_eb_statement_summary_by_month(
             WHERE (es.year = %s AND (es.month = %s OR es.month = %s OR es.month = %s))
         """
         params = (
-            # Windmill params (Strictly previous month)
-            prev_year, prev_month_name, prev_month_num_str, prev_month_num_str_pad,
-            # Solar params (Strictly previous month)
-            prev_year, prev_month_name, prev_month_num_str, prev_month_num_str_pad
+            # Windmill params (Selected month)
+            year, current_month_name, current_month_num_str, current_month_num_str_pad,
+            # Solar params (Selected month)
+            year, current_month_name, current_month_num_str, current_month_num_str_pad
         )
         cursor.execute(query, params)
         rows = cursor.fetchall()

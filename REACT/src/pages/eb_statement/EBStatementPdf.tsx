@@ -278,6 +278,7 @@ const EBStatementPdf = () => {
                                     <TableHead className="font-bold text-center">C4</TableHead>
                                     <TableHead className="font-bold text-center">C5</TableHead>
                                     <TableHead className="font-bold text-right pr-4">Total Net</TableHead>
+                                    <TableHead className="font-bold text-right pr-4">System Net</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -292,6 +293,19 @@ const EBStatementPdf = () => {
                                             parseFloat(data.slots?.C4 || 0) +
                                             parseFloat(data.slots?.C5 || 0)).toLocaleString()}
                                     </TableCell>
+                                    {(() => {
+                                        const totalNet = (parseFloat(data.slots?.C1 || 0) +
+                                            parseFloat(data.slots?.C2 || 0) +
+                                            parseFloat(data.slots?.C4 || 0) +
+                                            parseFloat(data.slots?.C5 || 0));
+                                        const systemNet = parseFloat(data.system_net || 0);
+                                        const isDiff = Math.abs(totalNet - systemNet) > 0.1;
+                                        return (
+                                            <TableCell className={`text-right pr-4 font-bold ${isDiff ? 'text-red-600' : 'text-green-700'}`}>
+                                                {systemNet.toLocaleString()}
+                                            </TableCell>
+                                        );
+                                    })()}
                                 </TableRow>
                             </TableBody>
                         </Table>

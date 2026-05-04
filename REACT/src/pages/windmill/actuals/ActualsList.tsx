@@ -1,5 +1,4 @@
-
-import { Search, FileText, Trash2 } from "lucide-react";
+import { Search, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -325,7 +324,6 @@ export default function ActualsList() {
                                         <TableHead className="font-semibold text-white py-1 h-8 whitespace-nowrap text-xs">SC Number</TableHead>
                                         <TableHead className="font-semibold text-white py-1 h-8 whitespace-nowrap text-xs text-center">PDF</TableHead>
                                         <TableHead className="font-semibold text-white py-1 h-8 whitespace-nowrap text-xs text-center">Auto Reconciled Bill</TableHead>
-                                        <TableHead className="font-semibold text-white py-1 h-8 whitespace-nowrap text-xs text-center">Action</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -354,14 +352,11 @@ export default function ActualsList() {
                                                         </Button>
                                                     ) : "-"}
                                                 </TableCell>
-                                                <TableCell className="py-1 text-center">
-                                                    -
-                                                </TableCell>
                                             </TableRow>
                                         ))
                                     ) : (
                                         <TableRow>
-                                            <TableCell colSpan={7} className="text-center py-4 text-slate-500">
+                                            <TableCell colSpan={6} className="text-center py-4 text-slate-500">
                                                 No records found
                                             </TableCell>
                                         </TableRow>

@@ -212,32 +212,21 @@ BEGIN
         a.actual_year,
         a.energy_number AS windmill,
         a.calculated_wheeling_value AS wheeling_charges,
+        t.total_self_gen_tax AS self_gen_tax,
 
         -- ✅ Total
-        t.total_wheeling,
-
-        -- ✅ SGT (Retrieved from masters.master_consumption_chargers code C011)
-        c.SGT_constant AS sgt_constant,
-
-        -- ✅ Tax (CORRECT CALCULATION)
-        (t.total_wheeling * c.SGT_constant) AS self_generation_tax
+        t.total_wheeling
 
     FROM windmill.actual a
 
     -- ✅ Total subquery
     CROSS JOIN (
-        SELECT IFNULL(SUM(calculated_wheeling_value), 0) AS total_wheeling
+        SELECT 
+            IFNULL(SUM(calculated_wheeling_value), 0) AS total_wheeling,
+            IFNULL(SUM(self_gen_tax), 0) AS total_self_gen_tax
         FROM actual
         WHERE client_eb_id = p_client_eb_id
     ) t
-
-    -- ✅ Configuration (Now fetched from chargers master C011 cost column)
-    CROSS JOIN (
-        SELECT IFNULL(cost, 0) AS SGT_constant
-        FROM masters.master_consumption_chargers
-        WHERE charge_code = 'C011'
-        LIMIT 1
-    ) c
 
     LEFT JOIN masters.master_customers mc 
         ON a.customer_id = mc.id

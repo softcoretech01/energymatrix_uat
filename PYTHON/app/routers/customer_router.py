@@ -497,16 +497,26 @@ async def get_customer_agreed_units(customer_id: int, user: dict = Depends(get_c
     
     cursor.callproc("sp_get_customer_agreed_units", (customer_id,))
     rows = cursor.fetchall()
-    cursor.close()
-    conn.close()
-
     # build complete 12‑month allocation regardless of what exists in DB
     months = ["January","February","March","April","May","June","July","August","September","October","November","December"]
     rowmap = {r["month"]: r for r in rows} if rows else {}
 
     total_agreed = ""
-    if rows and rows[0].get("total_agreement_number") is not None:
-        total_agreed = str(rows[0]["total_agreement_number"])
+    rate_per_unit = ""
+    if rows:
+        if rows[0].get("total_agreement_number") is not None:
+            total_agreed = str(rows[0]["total_agreement_number"])
+        # Fetch rate_per_unit from master_customers
+        cursor.execute("SELECT rate_per_unit FROM master_customers WHERE id = %s", (customer_id,))
+        mc_row = cursor.fetchone()
+        if mc_row and mc_row.get("rate_per_unit") is not None:
+            rate_per_unit = str(mc_row["rate_per_unit"])
+    else:
+        # Even if no agreed units rows, try to get rate from master_customers
+        cursor.execute("SELECT rate_per_unit FROM master_customers WHERE id = %s", (customer_id,))
+        mc_row = cursor.fetchone()
+        if mc_row and mc_row.get("rate_per_unit") is not None:
+            rate_per_unit = str(mc_row["rate_per_unit"])
 
     allocation = []
     for m in months:
@@ -519,7 +529,10 @@ async def get_customer_agreed_units(customer_id: int, user: dict = Depends(get_c
             "c5": str(r["c5_units"]) if r and r["c5_units"] is not None else ""
         })
 
-    return {"total_agreed_units": total_agreed, "unit_allocation": allocation}
+    cursor.close()
+    conn.close()
+
+    return {"total_agreed_units": total_agreed, "rate_per_unit": rate_per_unit, "unit_allocation": allocation}
 
 
 @router.post("/{customer_id}/agreed-units")
@@ -536,13 +549,22 @@ async def save_customer_agreed_units(
         # Delete old rows
         cursor.callproc("sp_delete_customer_agreed_units", (customer_id,))
         
-        total_agreed = None
-        if data.total_agreed_units:
+        total_agreed = 0
+        if data.total_agreed_units is not None and str(data.total_agreed_units).strip() != "":
             try:
                 # Handle cases where it might be a float string like "5000.0"
                 total_agreed = int(float(data.total_agreed_units))
             except (ValueError, TypeError):
-                total_agreed = None
+                total_agreed = 0        
+        # Update rate_per_unit in master_customers
+        rate_val = 0.0
+        if data.rate_per_unit is not None and str(data.rate_per_unit).strip() != "":
+            try:
+                rate_val = float(data.rate_per_unit)
+            except (ValueError, TypeError):
+                rate_val = 0.0
+        
+        cursor.execute("UPDATE master_customers SET rate_per_unit = %s WHERE id = %s", (rate_val, customer_id))
         
         grand_total = 0
         # first accumulate grand total
@@ -597,12 +619,21 @@ async def update_customer_agreed_units(
     try:
         cursor.callproc("sp_delete_customer_agreed_units", (customer_id,))
 
-        total_agreed = None
-        if data.total_agreed_units:
+        total_agreed = 0
+        if data.total_agreed_units is not None and str(data.total_agreed_units).strip() != "":
             try:
                 total_agreed = int(float(data.total_agreed_units))
             except (ValueError, TypeError):
-                total_agreed = None
+                total_agreed = 0
+
+        rate_val = 0.0
+        if data.rate_per_unit is not None and str(data.rate_per_unit).strip() != "":
+            try:
+                rate_val = float(data.rate_per_unit)
+            except (ValueError, TypeError):
+                rate_val = 0.0
+        
+        cursor.execute("UPDATE master_customers SET rate_per_unit = %s WHERE id = %s", (rate_val, customer_id))
 
         grand_total = 0
         for row in data.unit_allocation:

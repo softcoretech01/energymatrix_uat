@@ -62,26 +62,26 @@ export default function ActualsPdf() {
 
                 {/* Header */}
                 {header && (
-    <div className="border p-4 mb-4 text-sm">
-        <p><b>Customer:</b> {header.customer_name}</p>
-        <p><b>Service No:</b> {header.sc_number}</p>
-        <p><b>Year:</b> {header.year}</p>
-        <p><b>Month:</b> {getMonthName(header.month)}</p>
+                    <div className="border p-4 mb-4 text-sm">
+                        <p><b>Customer:</b> {header.customer_name}</p>
+                        <p><b>Service No:</b> {header.sc_number}</p>
+                        <p><b>Year:</b> {header.year}</p>
+                        <p><b>Month:</b> {getMonthName(header.month)}</p>
 
-       <p>
-    <b>Self Generation Tax:</b>{" "}
-    {(Number(header?.self_generation_tax) || 0).toFixed(3)}{" "}
-   
-</p>
-    </div>
-)}
+                        <p>
+                            <b>Self Generation Tax:</b>{" "}
+                            {(Number(header?.self_gen_tax) || 0).toFixed(3)}{" "}
+
+                        </p>
+                    </div>
+                )}
 
                 {/* Table */}
                 <table className="w-full border-collapse border border-gray-300 text-sm">
                     <thead>
                         <tr className="bg-gray-100">
                             <th className="border p-2 text-left">Windmill</th>
-                            <th className="border p-2 text-left">Wheeling Charges</th>
+                            <th className="border p-2 text-left">Wheeling Units</th>
                         </tr>
                     </thead>
 
@@ -90,8 +90,8 @@ export default function ActualsPdf() {
                             <tr key={index}>
                                 <td className="border p-2">{item.windmill}</td>
                                 <td className="border p-2">
-    {(Number(item.wheeling_charges) || 0).toFixed(2)}
-</td>
+                                    {(Number(item.wheeling_charges) || 0).toFixed(2)}
+                                </td>
                             </tr>
                         ))}
 
@@ -99,11 +99,11 @@ export default function ActualsPdf() {
                         <tr className="bg-gray-50 font-bold">
                             <td className="border p-2">Total</td>
                             <td className="border p-2">
-    {(Number(total) || 0).toFixed(2)}
-</td>
+                                {(Number(total) || 0).toFixed(2)}
+                            </td>
                         </tr>
 
-                      
+
                     </tbody>
                 </table>
 

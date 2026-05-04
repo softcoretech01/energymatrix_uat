@@ -38,15 +38,15 @@ import axios from "axios";
 
 export default function WindmillList() {
     const navigate = useNavigate();
-    const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString());
-    const [selectedMonth, setSelectedMonth] = useState<string>((new Date().getMonth() + 1).toString());
+    const [selectedYear, setSelectedYear] = useState<string>("all");
+    const [selectedMonth, setSelectedMonth] = useState<string>("all");
     const [fromDate, setFromDate] = useState<Date>();
     const [toDate, setToDate] = useState<Date>();
     const [selectedWm, setSelectedWm] = useState("");
     const [searchKeyword, setSearchKeyword] = useState("");
 
-    const [appliedYear, setAppliedYear] = useState<string>(new Date().getFullYear().toString());
-    const [appliedMonth, setAppliedMonth] = useState<string>((new Date().getMonth() + 1).toString());
+    const [appliedYear, setAppliedYear] = useState<string>("all");
+    const [appliedMonth, setAppliedMonth] = useState<string>("all");
     const [appliedFromDate, setAppliedFromDate] = useState<Date>();
     const [appliedToDate, setAppliedToDate] = useState<Date>();
     const [appliedWm, setAppliedWm] = useState("")
@@ -68,14 +68,14 @@ export default function WindmillList() {
         fetchGeneration();
     };
     const handleCancel = () => {
-        setSelectedYear(currentYear.toString());
-        setSelectedMonth((new Date().getMonth() + 1).toString());
+        setSelectedYear("all");
+        setSelectedMonth("all");
         setFromDate(undefined);
         setToDate(undefined);
         setSelectedWm("");
         setSearchKeyword("");
-        setAppliedYear(currentYear.toString());
-        setAppliedMonth((new Date().getMonth() + 1).toString());
+        setAppliedYear("all");
+        setAppliedMonth("all");
         setAppliedFromDate(undefined);
         setAppliedToDate(undefined);
         setAppliedWm("");
@@ -176,8 +176,8 @@ export default function WindmillList() {
         if (appliedFromDate && appliedToDate) {
             dateMatch = rowDate >= appliedFromDate && rowDate <= appliedToDate;
         } else {
-            const matchesYear = rowDate.getFullYear().toString() === appliedYear;
-            const matchesMonth = (rowDate.getMonth() + 1).toString() === appliedMonth;
+            const matchesYear = appliedYear === "all" || rowDate.getFullYear().toString() === appliedYear;
+            const matchesMonth = appliedMonth === "all" || (rowDate.getMonth() + 1).toString() === appliedMonth;
             dateMatch = matchesYear && matchesMonth;
         }
 
@@ -241,7 +241,8 @@ export default function WindmillList() {
                                 <SelectTrigger className="w-[100px] h-9 bg-white border-slate-300 text-sm">
                                     <SelectValue placeholder="Select Year" />
                                 </SelectTrigger>
-                                <SelectContent>
+                                 <SelectContent>
+                                    <SelectItem value="all">All Year</SelectItem>
                                     {years.map((year) => (
                                         <SelectItem key={year} value={year.toString()}>
                                             {year}
@@ -255,7 +256,8 @@ export default function WindmillList() {
                                 <SelectTrigger className="w-[120px] h-9 bg-white border-slate-300 text-sm">
                                     <SelectValue placeholder="Select Month" />
                                 </SelectTrigger>
-                                <SelectContent>
+                                 <SelectContent>
+                                    <SelectItem value="all">All Month</SelectItem>
                                     {months.map((month) => (
                                         <SelectItem key={month.value} value={month.value}>
                                             {month.label}
@@ -367,6 +369,7 @@ export default function WindmillList() {
                                     <TableRow>
                                         <TableHead className="font-semibold text-white h-10 whitespace-nowrap">Date</TableHead>
                                         <TableHead className="font-semibold text-white h-10 whitespace-nowrap">Wind Mill Number</TableHead>
+                                        <TableHead className="font-semibold text-white h-10 whitespace-nowrap">Wind Mill Name</TableHead>
                                         <TableHead className="font-semibold text-white h-10 whitespace-nowrap">Units</TableHead>
                                         <TableHead className="font-semibold text-white h-10 whitespace-nowrap">Status</TableHead>
                                         <TableHead className="font-semibold text-white text-center h-10 whitespace-nowrap">Action</TableHead>
@@ -378,6 +381,7 @@ export default function WindmillList() {
                                             <TableRow key={row.id} className="hover:bg-slate-50">
                                                 <TableCell className="py-2 text-sm">{formatDate(new Date(row.transaction_date))}</TableCell>
                                                 <TableCell className="py-2 text-sm">{row.windmill_number}</TableCell>
+                                                <TableCell className="py-2 text-sm font-semibold">{row.windmill_name || "N/A"}</TableCell>
                                                 <TableCell className="py-2 text-sm">{row.units}</TableCell>
                                                 <TableCell className="py-2">
                                                     <Badge

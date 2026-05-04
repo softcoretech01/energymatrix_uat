@@ -110,15 +110,24 @@ async def upload_actual_allotment(
             raise HTTPException(status_code=400, detail="Only PDF files allowed")
 
         conn = get_connection(db_name=DB_NAME_WINDMILL)
-        cursor = conn.cursor()
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
         
-        # 1. Fetch expected WM No
-        cursor.execute("SELECT windmill_number FROM masters.master_windmill WHERE id = %s", (windmill_id,))
-        wm_row = cursor.fetchone()
-        if not wm_row:
-            log_debug(f"Error: Windmill ID {windmill_id} not found")
+        # 1. Fetch expected WM No via SP
+        cursor.callproc("windmill.sp_get_all_windmill_numbers", ())
+        wm_rows = cursor.fetchall()
+        while cursor.nextset(): pass
+        
+        if not wm_rows:
+            log_debug(f"Error: No windmills found in database")
+            raise HTTPException(status_code=404, detail="No windmills found")
+            
+        # Find the specific windmill we are interested in
+        selected_wm = next((r for r in wm_rows if r["id"] == windmill_id), None)
+        if not selected_wm:
+            log_debug(f"Error: Windmill ID {windmill_id} not found in list")
             raise HTTPException(status_code=404, detail="Selected windmill not found")
-        expected_wm_no = str(wm_row[0]).strip()
+            
+        expected_wm_no = str(selected_wm["windmill_number"]).strip()
         log_debug(f"Expected WM No: {expected_wm_no}")
 
         # 2. Save file temporarily
@@ -173,21 +182,18 @@ async def upload_actual_allotment(
             consumer_no = item["consumer_no"]
             allotment_total = item["allotment_total"]
             
-            # Resolve service_id
-            cursor.execute(
-                "SELECT id FROM masters.customer_service WHERE CAST(service_number AS CHAR) = %s OR REPLACE(CAST(service_number AS CHAR), '-', '') = %s",
-                (consumer_no, consumer_no)
-            )
+            # Resolve service_id via SP
+            cursor.callproc("windmill.sp_get_service_id_by_consumer_no", (consumer_no,))
             row = cursor.fetchone()
-            if not row:
-                stripped_cn = consumer_no.lstrip('0')
-                cursor.execute("SELECT id FROM masters.customer_service WHERE CAST(service_number AS CHAR) = %s", (stripped_cn,))
-                row = cursor.fetchone()
+            while cursor.nextset(): pass
 
             if row:
-                service_id = row[0]
-                ActualAllotment.save_allotment(cursor, windmill_id, service_id, allotment_total, year, month, file_path, user["id"])
-                parsed_count += 1
+                service_id = row[0] if isinstance(row, tuple) else row.get("id")
+                if service_id is not None:
+                    ActualAllotment.save_allotment(cursor, windmill_id, service_id, allotment_total, year, month, file_path, user["id"])
+                    parsed_count += 1
+                else:
+                    unmatched.append(consumer_no)
             else:
                 unmatched.append(consumer_no)
 
@@ -223,54 +229,15 @@ async def get_actual_allotment_list(
     conn = get_connection(db_name=DB_NAME_WINDMILL)
     cursor = conn.cursor(pymysql.cursors.DictCursor)
     try:
-        # 1. Query windmill.actual (System records from EB Bill)
-        actual_conditions = ["a.client_eb_id IS NOT NULL"]
-        actual_params = []
-        if year is not None:
-            actual_conditions.append("a.actual_year = %s")
-            actual_params.append(year)
-        if month is not None:
-            actual_conditions.append("a.actual_month = %s")
-            actual_params.append(month)
-
-        actual_where = "WHERE " + " AND ".join(actual_conditions)
-        actual_query = f"""
-            SELECT 
-                MIN(a.id) AS id, a.client_eb_id, a.actual_year AS year, a.actual_month AS month, 
-                mc.customer_name, CAST(cs.service_number AS CHAR) AS service_number, cs.id AS service_id, a.pdf_file_path,
-                a.calculated_wheeling_value AS system_wheeling_charge, 'System-Final-Verified' AS source
-            FROM windmill.actual a
-            JOIN masters.master_customers mc ON a.customer_id = mc.id
-            JOIN masters.customer_service cs ON a.sc_id = cs.id
-            {actual_where}
-            GROUP BY a.actual_year, a.actual_month, a.customer_id, a.sc_id
-            ORDER BY a.actual_year DESC, a.actual_month DESC
-        """
-        cursor.execute(actual_query, actual_params)
-        system_rows = cursor.fetchall()
-
-        # 2. Query manual data for reconciliation summary
-        aa_conditions = []
-        aa_params = []
-        if year is not None:
-            aa_conditions.append("year = %s")
-            aa_params.append(year)
-        if month is not None:
-            aa_conditions.append("month = %s")
-            aa_params.append(month)
-        
-        aa_where = "WHERE " + " AND ".join(aa_conditions) if aa_conditions else ""
-        aa_query = f"SELECT service_id, year, month, sum(allotment_total) as allotment_total FROM windmill.actual_allotment {aa_where} GROUP BY service_id, year, month"
-        cursor.execute(aa_query, aa_params)
-        manual_rows = cursor.fetchall()
-
-        manual_map = {(row['service_id'], row['year'], row['month']): float(row['allotment_total']) for row in manual_rows}
+        # 1. Query combined reconciliation list via SP
+        cursor.callproc("windmill.sp_get_actual_reconciliation_list", (year, month))
+        rows = cursor.fetchall()
+        while cursor.nextset(): pass
 
         final_result = []
-        for r in system_rows:
+        for r in rows:
             safe_r = _safe_row(r)
-            s_id, r_y, r_m = r['service_id'], r['year'], r['month']
-            manual_val = manual_map.get((s_id, r_y, r_m))
+            manual_val = float(r['manual_adjusted_total']) if r.get('manual_adjusted_total') is not None else None
             safe_r['manual_adjusted_total'] = manual_val
             
             if manual_val is None:
@@ -279,7 +246,7 @@ async def get_actual_allotment_list(
                 sys_val = float(r['system_wheeling_charge'] or 0)
                 safe_r['reconciliation_status'] = 'Matched' if abs(manual_val - sys_val) < 0.01 else 'Mismatched'
             final_result.append(safe_r)
-
+        
         return final_result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -301,7 +268,7 @@ async def delete_actual_allotment(record_id: int, user: dict = Depends(get_curre
     conn = get_connection(db_name=DB_NAME_WINDMILL)
     cursor = conn.cursor()
     try:
-        cursor.execute("DELETE FROM windmill.actual_allotment WHERE id = %s", (record_id,))
+        cursor.callproc("windmill.sp_delete_actual_allotment", (record_id,))
         if cursor.rowcount == 0: raise HTTPException(status_code=404, detail="Record not found")
         conn.commit()
         return {"message": "Record deleted successfully"}
@@ -318,29 +285,47 @@ async def get_reconciliation_details(client_eb_id: int):
     cursor = conn.cursor(pymysql.cursors.DictCursor)
     sp_cursor = conn.cursor() 
     try:
-        cursor.execute("SELECT bill_year, bill_month, sc_id FROM eb_bill WHERE id = %s", (client_eb_id,))
+        cursor.callproc("windmill.sp_get_eb_bill_header_info", (client_eb_id,))
         header = cursor.fetchone()
+        while cursor.nextset(): pass
         if not header: raise HTTPException(status_code=404, detail="EB Bill not found")
         
         b_year, b_month, s_id = header['bill_year'], header['bill_month'], header['sc_id']
-        cursor.execute("SELECT mc.customer_name, cs.service_number FROM masters.customer_service cs JOIN masters.master_customers mc ON cs.customer_id = mc.id WHERE cs.id = %s", (s_id,))
+        cursor.callproc("windmill.sp_get_customer_service_info", (s_id,))
         customer_info = cursor.fetchone()
+        while cursor.nextset(): pass
 
-        sp_cursor.callproc("get_eb_bill_adjustment_charges", [client_eb_id])
-        charge_rows = sp_cursor.fetchall()
-        while sp_cursor.nextset(): pass
-
-        system_charges = {str(row[2]): float(row[12] or 0) for row in charge_rows}
-        cursor.execute("SELECT mw.windmill_number, aa.allotment_total FROM windmill.actual_allotment aa JOIN masters.master_windmill mw ON aa.windmill_id = mw.id WHERE aa.service_id = %s AND aa.year = %s AND aa.month = %s", (s_id, b_year, b_month))
+        # Fetch from windmill.actual via SP
+        cursor.callproc("windmill.sp_get_reconciliation_system_charges", (client_eb_id,))
+        actual_rows = cursor.fetchall()
+        while cursor.nextset(): pass
+        
+        system_charges = {
+            str(row['energy_number']): {
+                "calculated_value": float(row['calculated_wheeling_value'] or 0),
+                "original_charges": float(row['wheeling_charges'] or 0)
+            }
+            for row in actual_rows
+        }
+        
+        cursor.callproc("windmill.sp_get_manual_allotment_details", (s_id, b_year, b_month))
         manual_rows = cursor.fetchall()
+        while cursor.nextset(): pass
         manual_map = {str(row['windmill_number']): float(row['allotment_total'] or 0) for row in manual_rows}
 
         all_windmills = sorted(list(set(system_charges.keys()).union(set(manual_map.keys()))))
         comparison = []
         for wm in all_windmills:
-            sys_val, man_val = system_charges.get(wm, 0.0), manual_map.get(wm, 0.0)
+            sys_data = system_charges.get(wm, {"calculated_value": 0.0, "original_charges": 0.0})
+            sys_val = sys_data["calculated_value"]
+            orig_charges = sys_data["original_charges"]
+            man_val = manual_map.get(wm, 0.0)
+            
             comparison.append({
-                "windmill": wm, "system_wheeling_charge": sys_val, "manual_adjusted_total": man_val,
+                "windmill": wm, 
+                "system_wheeling_charge": sys_val, 
+                "original_wheeling_charges": orig_charges,
+                "manual_adjusted_total": man_val,
                 "status": 'Matched' if abs(sys_val - man_val) < 0.01 else 'Mismatched'
             })
 
@@ -374,7 +359,7 @@ async def get_actuals_pdf(client_eb_id: int):
             "sc_number": first["sc_number"],
             "month": first["actual_month"],
             "year": first["actual_year"],
-            "self_generation_tax": float(first["self_generation_tax"]),
+            "self_gen_tax": float(first["self_gen_tax"]) if first.get("self_gen_tax") is not None else 0.0,
         }
         table_data = [
             {

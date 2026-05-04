@@ -22,6 +22,17 @@ async def generate_invoice(data: dict, user: dict = Depends(get_current_user)):
         conn = get_connection(db_name="windmill")
         cursor = conn.cursor(pymysql.cursors.DictCursor)
 
+        # Step 0: Check if invoice already exists for this service/year/month
+        cursor.execute("""
+            SELECT id FROM client_invoice 
+            WHERE service_id = %s AND year = %s AND month = %s
+        """, (int(data["service_id"]), int(data["year"]), data["month"]))
+        if cursor.fetchone():
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Invoice already exists for {data['month']} {data['year']} for this service number."
+            )
+
         # Step 1: Get the next sequential invoice number
         cursor.callproc("sp_get_next_invoice_number")
         row = cursor.fetchone()
@@ -47,33 +58,72 @@ async def generate_invoice(data: dict, user: dict = Depends(get_current_user)):
         # Step 3: Auto-populate client_invoice_details
         invoice_id = result["id"] if result else None
         if invoice_id:
-            # Fetch the calculated default values
-            while cursor.nextset(): pass
-            cursor.callproc("sp_get_client_invoice_by_id", (invoice_id,))
+            # Step 1: Fetch invoice metadata
+            cursor.callproc("windmill.sp_get_client_invoice_metadata", (invoice_id,))
             invoice = cursor.fetchone()
             while cursor.nextset(): pass
             
             if invoice:
-                default_fields = [
-                    ("Units", float(invoice.get("generated_units", 0))),
-                    ("Rate", float(invoice.get("invoice_constant", 6.80))),
-                    ("Meter", float(invoice.get("charge_meter", 0))),
-                    ("O&M Charges", float(invoice.get("charge_om", 0))),
-                    ("Transmsn Chrgs", float(invoice.get("charge_trans", 0))),
-                    ("Sys Opr Chrgs", float(invoice.get("charge_sys_opr", 0))),
-                    ("RkvAh", float(invoice.get("charge_rkvah", 0))),
-                    ("Import Chrgs", float(invoice.get("charge_import", 0))),
-                    ("Scheduling chrgs", float(invoice.get("charge_scheduling", 0))),
-                    ("DSM Charges", float(invoice.get("charge_dsm", 0))),
-                    ("Wheeling", float(invoice.get("charge_wheeling", 0))),
-                    ("Selfenergy chrgs", float(invoice.get("charge_tax", 0))),
+                month_map = {
+                    "January": 1, "February": 2, "March": 3, "April": 4, "May": 5, "June": 6,
+                    "July": 7, "August": 8, "September": 9, "October": 10, "November": 11, "December": 12
+                }
+                m_int = month_map.get(invoice.get("month", ""), 0)
+
+                # Step 2: Fetch actual tax
+                cursor.callproc("windmill.sp_get_actual_tax_total", (
+                    invoice.get("customer_id"), 
+                    invoice.get("service_id"), 
+                    invoice.get("year"), 
+                    m_int
+                ))
+                tax_row = cursor.fetchone()
+                actual_tax = float(tax_row["total_tax"] or 0) if tax_row else 0.0
+                while cursor.nextset(): pass
+
+                # Step 3: Populate details
+                charge_fields = [
+                    ("Meter", "meter"),
+                    ("O&M Charges", "om"),
+                    ("Transmsn Chrgs", "trans"),
+                    ("Sys Opr Chrgs", "sys_opr"),
+                    ("RkvAh", "rkvah"),
+                    ("Import Chrgs", "import"),
+                    ("Scheduling chrgs", "scheduling"),
+                    ("DSM Charges", "dsm"),
+                    ("Wheeling", "wheeling"),
                 ]
+
+                d_map = {}
+                # Units and Rate
+                units = float(invoice.get("generated_units", 0))
+                rate = float(invoice.get("invoice_constant", 0.00))
+                d_map["Units"] = {"amount": units, "calc": None}
+                d_map["Rate"] = {"amount": rate, "calc": None}
+
+                for label, key in charge_fields:
+                    w = float(invoice.get(f"charge_{key}_windmill", 0))
+                    s = float(invoice.get(f"charge_{key}_solar", 0))
+                    total = w + s
+                    calc = f"{w:,.2f} (Windmill) + {s:,.2f} (Solar) = {total:,.2f}"
+                    d_map[label] = {"amount": total, "calc": calc}
+
+                # Self Energy Tax
+                d_map["Selfenergy chrgs"] = {"amount": actual_tax, "calc": f"Summed from actual table = {actual_tax:,.2f}"}
                 
-                for field_name, amount in default_fields:
-                    cursor.execute(
-                        "INSERT INTO client_invoice_details (invoice_id, field_name, amount) VALUES (%s, %s, %s)",
-                        (invoice_id, field_name, amount)
-                    )
+                total_charges = sum(v["amount"] for k, v in d_map.items() if k not in ["Units", "Rate"])
+                net_units_value = units * rate
+                final_amount = net_units_value - total_charges
+                
+                # Add Total field
+                d_map["Total"] = {"amount": total_charges, "calc": f"Sum of all above charges = {total_charges:,.2f}"}
+
+                for field_name, val in d_map.items():
+                    cursor.callproc("windmill.sp_upsert_client_invoice_detail", (invoice_id, field_name, val["amount"], val["calc"]))
+                
+                # Update main invoice amount
+                cursor.callproc("windmill.sp_update_client_invoice_amount", (invoice_id, final_amount))
+                
                 conn.commit()
 
         return {
@@ -152,8 +202,9 @@ async def get_invoice_print_data(
             raise HTTPException(status_code=404, detail="Invoice not found")
 
         # Fetch stored details
-        cursor.execute("SELECT field_name, amount FROM client_invoice_details WHERE invoice_id = %s", (invoice_id,))
+        cursor.callproc("sp_get_client_invoice_details", (invoice_id,))
         details = cursor.fetchall()
+        while cursor.nextset(): pass
         
         # Serialize
         row_copy = dict(row)
@@ -161,6 +212,32 @@ async def get_invoice_print_data(
             row_copy["invoice_date"] = str(row_copy["invoice_date"])
             
         row_copy["details"] = details
+        
+        # Fallback: If Selfenergy chrgs is 0 or missing, try to fetch from actual table
+        tax_entry = next((d for d in details if d["field_name"] == "Selfenergy chrgs"), None)
+        if not tax_entry or float(tax_entry["amount"]) == 0:
+            month_map = {
+                "January": 1, "February": 2, "March": 3, "April": 4, "May": 5, "June": 6,
+                "July": 7, "August": 8, "September": 9, "October": 10, "November": 11, "December": 12
+            }
+            m_int = month_map.get(row_copy.get("month", ""), 0)
+            
+            # Use stored procedure for tax
+            cursor.callproc("windmill.sp_get_actual_tax_total", (
+                row_copy.get("customer_id"), 
+                row_copy.get("service_id"), 
+                row_copy.get("year"), 
+                m_int
+            ))
+            tax_row = cursor.fetchone()
+            while cursor.nextset(): pass
+
+            if tax_row and tax_row["total_tax"]:
+                actual_tax = float(tax_row["total_tax"])
+                if not tax_entry:
+                    row_copy["details"].append({"field_name": "Selfenergy chrgs", "amount": actual_tax})
+                else:
+                    tax_entry["amount"] = actual_tax
 
         return {"status": "success", "data": row_copy}
 
@@ -183,39 +260,115 @@ async def get_invoice_details(invoice_id: int, user: dict = Depends(get_current_
     try:
         conn = get_connection(db_name="windmill")
         cursor = conn.cursor(pymysql.cursors.DictCursor)
-        
-        cursor.execute("SELECT field_name, amount FROM client_invoice_details WHERE invoice_id = %s", (invoice_id,))
+        # Fetch stored details
+        cursor.callproc("windmill.sp_get_client_invoice_details", (invoice_id,))
         rows = cursor.fetchall()
+        while cursor.nextset(): pass
         
         # If no details exist (for old invoices), populate them
         if not rows:
-            cursor.callproc("sp_get_client_invoice_by_id", (invoice_id,))
+            cursor.callproc("windmill.sp_get_client_invoice_metadata", (invoice_id,))
             invoice = cursor.fetchone()
             while cursor.nextset(): pass
             
             if invoice:
-                default_fields = [
-                    ("Units", float(invoice.get("generated_units", 0))),
-                    ("Rate", float(invoice.get("invoice_constant", 6.80))),
-                    ("Meter", float(invoice.get("charge_meter", 0))),
-                    ("O&M Charges", float(invoice.get("charge_om", 0))),
-                    ("Transmsn Chrgs", float(invoice.get("charge_trans", 0))),
-                    ("Sys Opr Chrgs", float(invoice.get("charge_sys_opr", 0))),
-                    ("RkvAh", float(invoice.get("charge_rkvah", 0))),
-                    ("Import Chrgs", float(invoice.get("charge_import", 0))),
-                    ("Scheduling chrgs", float(invoice.get("charge_scheduling", 0))),
-                    ("DSM Charges", float(invoice.get("charge_dsm", 0))),
-                    ("Wheeling", float(invoice.get("charge_wheeling", 0))),
-                    ("Selfenergy chrgs", float(invoice.get("charge_tax", 0))),
+                month_map = {
+                    "January": 1, "February": 2, "March": 3, "April": 4, "May": 5, "June": 6,
+                    "July": 7, "August": 8, "September": 9, "October": 10, "November": 11, "December": 12
+                }
+                m_int = month_map.get(invoice.get("month", ""), 0)
+                
+                # Fetch tax via SP
+                cursor.callproc("windmill.sp_get_actual_tax_total", (
+                    invoice.get("customer_id"), 
+                    invoice.get("service_id"), 
+                    invoice.get("year"), 
+                    m_int
+                ))
+                tax_row = cursor.fetchone()
+                actual_tax = float(tax_row["total_tax"] or 0) if tax_row else 0.0
+                while cursor.nextset(): pass
+
+                charge_fields = [
+                    ("Meter", "meter"),
+                    ("O&M Charges", "om"),
+                    ("Transmsn Chrgs", "trans"),
+                    ("Sys Opr Chrgs", "sys_opr"),
+                    ("RkvAh", "rkvah"),
+                    ("Import Chrgs", "import"),
+                    ("Scheduling chrgs", "scheduling"),
+                    ("DSM Charges", "dsm"),
+                    ("Wheeling", "wheeling"),
                 ]
-                for field_name, amount in default_fields:
-                    cursor.execute(
-                        "INSERT INTO client_invoice_details (invoice_id, field_name, amount) VALUES (%s, %s, %s)",
-                        (invoice_id, field_name, amount)
-                    )
+
+                d_map = {}
+                # Units and Rate
+                units = float(invoice.get("generated_units", 0))
+                rate = float(invoice.get("invoice_constant", 0.00))
+                d_map["Units"] = {"amount": units, "calc": None}
+                d_map["Rate"] = {"amount": rate, "calc": None}
+
+                for label, key in charge_fields:
+                    w = float(invoice.get(f"charge_{key}_windmill", 0))
+                    s = float(invoice.get(f"charge_{key}_solar", 0))
+                    total = w + s
+                    calc = f"{w:,.2f} (Windmill) + {s:,.2f} (Solar) = {total:,.2f}"
+                    d_map[label] = {"amount": total, "calc": calc}
+
+                # Self Energy Tax
+                d_map["Selfenergy chrgs"] = {"amount": actual_tax, "calc": f"Summed from actual table = {actual_tax:,.2f}"}
+                
+                total_charges = sum(v["amount"] for k, v in d_map.items() if k not in ["Units", "Rate"])
+                net_units_value = units * rate
+                final_amount = net_units_value - total_charges
+                
+                # Add Total field
+                d_map["Total"] = {"amount": total_charges, "calc": f"Sum of all above charges = {total_charges:,.2f}"}
+
+                for field_name, val in d_map.items():
+                    cursor.callproc("windmill.sp_upsert_client_invoice_detail", (invoice_id, field_name, val["amount"], val["calc"]))
+                
+                # Update main invoice amount
+                cursor.callproc("windmill.sp_update_client_invoice_amount", (invoice_id, final_amount))
+                
                 conn.commit()
-                cursor.execute("SELECT field_name, amount FROM client_invoice_details WHERE invoice_id = %s", (invoice_id,))
+                # Refresh rows via SP
+                cursor.callproc("windmill.sp_get_client_invoice_details", (invoice_id,))
                 rows = cursor.fetchall()
+                while cursor.nextset(): pass
+        
+        # Even if rows existed, check if tax is 0 and try to update it
+        tax_entry = next((r for r in rows if r["field_name"] == "Selfenergy chrgs"), None)
+        if not tax_entry or float(tax_entry["amount"]) == 0:
+             # Logic to re-calculate tax for existing rows via metadata SP
+             cursor.callproc("windmill.sp_get_client_invoice_metadata", (invoice_id,))
+             inv_info = cursor.fetchone()
+             while cursor.nextset(): pass
+
+             if inv_info:
+                month_map = {
+                    "January": 1, "February": 2, "March": 3, "April": 4, "May": 5, "June": 6,
+                    "July": 7, "August": 8, "September": 9, "October": 10, "November": 11, "December": 12
+                }
+                m_int = month_map.get(inv_info.get("month", ""), 0)
+                
+                cursor.callproc("windmill.sp_get_actual_tax_total", (
+                    inv_info.get("customer_id"), 
+                    inv_info.get("service_id"), 
+                    inv_info.get("year"), 
+                    m_int
+                ))
+                tax_row = cursor.fetchone()
+                while cursor.nextset(): pass
+
+                if tax_row and tax_row["total_tax"]:
+                    actual_tax = float(tax_row["total_tax"])
+                    cursor.callproc("windmill.sp_upsert_client_invoice_detail", (invoice_id, "Selfenergy chrgs", actual_tax))
+                    conn.commit()
+                    # Refresh rows again
+                    cursor.callproc("windmill.sp_get_client_invoice_details", (invoice_id,))
+                    rows = cursor.fetchall()
+                    while cursor.nextset(): pass
 
         return {"status": "success", "data": rows}
     except Exception as e:
@@ -238,18 +391,15 @@ async def update_invoice_details(invoice_id: int, data: dict, user: dict = Depen
         
         details = data.get("details", [])
         
-        # 1. Update details table
+        # 1. Update details table via SP
         for item in details:
-            cursor.execute(
-                "UPDATE client_invoice_details SET amount = %s WHERE invoice_id = %s AND field_name = %s",
-                (item["amount"], invoice_id, item["field_name"])
-            )
+            cursor.callproc("windmill.sp_upsert_client_invoice_detail", (invoice_id, item["field_name"], item["amount"], item.get("calculation")))
             
         # 2. Recalculate total amount for the main invoice table
         # Formula: Amount = Net Units - Total
         d_map = {d["field_name"]: float(d["amount"]) for d in details}
         units = d_map.get("Units", 0)
-        rate = d_map.get("Rate", 6.80)
+        rate = d_map.get("Rate", 0.00)
         net_units_value = units * rate
         
         charges_list = [
@@ -260,10 +410,28 @@ async def update_invoice_details(invoice_id: int, data: dict, user: dict = Depen
         total_charges = sum(d_map.get(c, 0) for c in charges_list)
         final_amount = net_units_value - total_charges
         
-        cursor.execute("UPDATE client_invoice SET amount = %s WHERE id = %s", (final_amount, invoice_id))
+        # 3. Update main invoice fields
+        main_fields = [
+            "delivery_note", "mode_terms_of_payment", "reference_no_date",
+            "other_references", "buyers_order_no", "buyers_order_date",
+            "dispatch_doc_no", "delivery_note_date", "dispatched_through",
+            "destination", "terms_of_delivery"
+        ]
         
+        for field in main_fields:
+            if field in data:
+                val = data[field]
+                if val == "": val = None
+                cursor.execute(f"UPDATE client_invoice SET {field} = %s WHERE id = %s", (val, invoice_id))
+
+        # Update Total charge detail
+        cursor.callproc("windmill.sp_upsert_client_invoice_detail", (invoice_id, "Total", total_charges, f"Sum of all updated charges = {total_charges:,.2f}"))
+
+        # Update final amount via SP
+        cursor.callproc("windmill.sp_update_client_invoice_amount", (invoice_id, final_amount))
+
         conn.commit()
-        return {"status": "success", "final_amount": final_amount}
+        return {"status": "success", "final_amount": final_amount, "total_charges": total_charges}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
