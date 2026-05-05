@@ -313,7 +313,7 @@ async def get_reconciliation_details(client_eb_id: int):
         while cursor.nextset(): pass
         manual_map = {str(row['windmill_number']): float(row['allotment_total'] or 0) for row in manual_rows}
 
-        all_windmills = sorted(list(set(system_charges.keys()).union(set(manual_map.keys()))))
+        all_windmills = sorted([wm for wm in set(system_charges.keys()).union(set(manual_map.keys())) if wm and wm != 'None'])
         comparison = []
         for wm in all_windmills:
             sys_data = system_charges.get(wm, {"calculated_value": 0.0, "original_charges": 0.0})

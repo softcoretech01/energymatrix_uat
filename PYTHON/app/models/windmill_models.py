@@ -399,6 +399,7 @@ class SolarChargeAllotmentDetails(Base):
     header_id = Column(Integer, ForeignKey("solar_charge_allotment_header.id"), nullable=False)
     charge_id = Column(Integer, nullable=False)          # FK to masters.master_consumption_chargers.id
     charge_amount = Column(DECIMAL(15, 2), default=0.00)
+    allocation = Column(DECIMAL(15, 2), default=0.00)
     
     # Audit Fields
     created_at = Column(DateTime, default=func.now())

@@ -835,16 +835,66 @@ async def read_pdf(
                     if os.path.exists(file_path): os.remove(file_path)
                     raise HTTPException(status_code=400, detail=f"Mismatch: Selected SE Number ({exp_se}) does not match PDF ({service_number_extracted})")
                     
-            month_names = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
-            if 1 <= month <= 12:
-                short_month = month_names[month-1]
-                # the pdf sometimes uses full month or short month. 
-                if short_month not in full_text.lower():
-                    if os.path.exists(file_path): os.remove(file_path)
-                    raise HTTPException(status_code=400, detail=f"Mismatch: PDF does not appear to be for Month '{short_month.capitalize()}'")
-            if str(year) not in full_text:
+            # ----------- HEADER MONTH/YEAR EXTRACTION -----------
+            billing_month_extracted = None
+            billing_year_extracted = None
+            
+            # Pattern: High Tension Bill for the Month of February 2026
+            header_pattern = r"Bill\s+for\s+the\s+Month\s+of\s+([a-zA-Z]+)\s+(\d{4})"
+            header_match = re.search(header_pattern, full_text, re.IGNORECASE)
+            
+            if header_match:
+                extracted_month_name = header_match.group(1).lower()
+                billing_year_extracted = int(header_match.group(2))
+                
+                month_map = {
+                    "january": 1, "february": 2, "march": 3, "april": 4, "may": 5, "june": 6,
+                    "july": 7, "august": 8, "september": 9, "october": 10, "november": 11, "december": 12,
+                    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+                    "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12
+                }
+                billing_month_extracted = month_map.get(extracted_month_name)
+            
+            # ----------- VALIDATION AGAINST FILTERS -----------
+            month_names_full = ["January","February","March","April","May","June","July","August","September","October","November","December"]
+            
+            if billing_month_extracted and billing_month_extracted != month:
                 if os.path.exists(file_path): os.remove(file_path)
-                raise HTTPException(status_code=400, detail=f"Mismatch: PDF does not appear to be for Year '{year}'")
+                exp_month_name = month_names_full[billing_month_extracted-1]
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Mismatch: PDF is for {exp_month_name}, but you selected {month_names_full[month-1]}"
+                )
+
+            if billing_year_extracted and billing_year_extracted != year:
+                if os.path.exists(file_path): os.remove(file_path)
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Mismatch: PDF is for Year {billing_year_extracted}, but you selected {year}"
+                )
+
+            # Strict Fallback: if header pattern not found, ensure the requested month/year isn't just found in a date field
+            if not header_match:
+                month_names_short = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
+                short_month = month_names_short[month-1] if 1 <= month <= 12 else ""
+                
+                # Check if short_month exists but exclude "Date of Bill" and "Due Date" lines
+                month_found_correctly = False
+                for line in full_text.split("\n"):
+                    line_l = line.lower()
+                    if "date of bill" in line_l or "due date" in line_l:
+                        continue
+                    if short_month in line_l:
+                        month_found_correctly = True
+                        break
+                
+                if not month_found_correctly:
+                    if os.path.exists(file_path): os.remove(file_path)
+                    raise HTTPException(status_code=400, detail=f"Mismatch: PDF does not appear to be for Month '{month_names_full[month-1]}'")
+                
+                if str(year) not in full_text:
+                    if os.path.exists(file_path): os.remove(file_path)
+                    raise HTTPException(status_code=400, detail=f"Mismatch: PDF does not appear to be for Year '{year}'")
 
             # Check duplicate and Upsert header using SP
             cursor.callproc(

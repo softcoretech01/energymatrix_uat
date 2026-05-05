@@ -256,3 +256,153 @@ pymysql.err.IntegrityError: (1048, "Column 'service_id' cannot be null")
 [2026-05-03 16:29:01.903252] Extracted PDF Meta: Month=2, Year=2026, Rows=6
 [2026-05-03 16:29:01.904021] Extracted PDF Services: ['039214391145']
 [2026-05-03 16:29:02.500950] SUCCESS: Processed 4 rows
+[2026-05-05 16:30:11.027284] --- START UPLOAD: 1798 - Adjusted report.pdf ---
+[2026-05-05 16:30:11.029040] Params: WM=2, Year=2026, Month=2
+[2026-05-05 16:30:11.705006] Expected WM No: 039224391798
+[2026-05-05 16:30:11.707273] Temp file saved: D:\DOWNLOADS\energymatrix_uat\Python\uploads\actual_allotment\TEMP_2_1798 - Adjusted report.pdf
+[2026-05-05 16:30:12.509931] PDF Header Match: Month=2, Year=2026
+[2026-05-05 16:30:12.627171] Extracted PDF Meta: Month=2, Year=2026, Rows=6
+[2026-05-05 16:30:12.627973] Extracted PDF Services: ['039224391798']
+[2026-05-05 16:30:14.776369] SUCCESS: Processed 4 rows
+[2026-05-05 16:30:28.602406] --- START UPLOAD: 1145- adjusted report.pdf ---
+[2026-05-05 16:30:28.603221] Params: WM=3, Year=2026, Month=2
+[2026-05-05 16:30:29.420692] Expected WM No: 039214391145
+[2026-05-05 16:30:29.422788] Temp file saved: D:\DOWNLOADS\energymatrix_uat\Python\uploads\actual_allotment\TEMP_3_1145- adjusted report.pdf
+[2026-05-05 16:30:30.189377] PDF Header Match: Month=2, Year=2026
+[2026-05-05 16:30:30.299027] Extracted PDF Meta: Month=2, Year=2026, Rows=6
+[2026-05-05 16:30:30.299893] Extracted PDF Services: ['039214391145']
+[2026-05-05 16:30:32.696539] SUCCESS: Processed 4 rows
+[2026-05-05 16:30:54.956819] --- START UPLOAD: 1188 - adjustment report.pdf ---
+[2026-05-05 16:30:54.958042] Params: WM=4, Year=2026, Month=2
+[2026-05-05 16:30:55.535087] Expected WM No: 039214391188
+[2026-05-05 16:30:55.537073] Temp file saved: D:\DOWNLOADS\energymatrix_uat\Python\uploads\actual_allotment\TEMP_4_1188 - adjustment report.pdf
+[2026-05-05 16:30:56.311225] PDF Header Match: Month=2, Year=2026
+[2026-05-05 16:30:56.700937] Extracted PDF Meta: Month=2, Year=2026, Rows=6
+[2026-05-05 16:30:56.701900] Extracted PDF Services: ['039214391188']
+[2026-05-05 16:30:57.305330] SUCCESS: Processed 4 rows
+[2026-05-05 16:31:15.752659] --- START UPLOAD: 1344- adjusted report.pdf ---
+[2026-05-05 16:31:15.754033] Params: WM=5, Year=2026, Month=2
+[2026-05-05 16:31:16.527343] Expected WM No: 039224391344
+[2026-05-05 16:31:16.529063] Temp file saved: D:\DOWNLOADS\energymatrix_uat\Python\uploads\actual_allotment\TEMP_5_1344- adjusted report.pdf
+[2026-05-05 16:31:17.319378] PDF Header Match: Month=2, Year=2026
+[2026-05-05 16:31:17.431336] Extracted PDF Meta: Month=2, Year=2026, Rows=6
+[2026-05-05 16:31:17.432429] Extracted PDF Services: ['039224391344']
+[2026-05-05 16:31:19.289640] SUCCESS: Processed 4 rows
+[2026-05-05 16:31:44.211616] --- START UPLOAD: 1189 - adjusted report.pdf ---
+[2026-05-05 16:31:44.212623] Params: WM=6, Year=2026, Month=2
+[2026-05-05 16:31:44.790049] Expected WM No: 039214391189
+[2026-05-05 16:31:44.792429] Temp file saved: D:\DOWNLOADS\energymatrix_uat\Python\uploads\actual_allotment\TEMP_6_1189 - adjusted report.pdf
+[2026-05-05 16:31:45.586313] PDF Header Match: Month=2, Year=2026
+[2026-05-05 16:31:45.691597] Extracted PDF Meta: Month=2, Year=2026, Rows=6
+[2026-05-05 16:31:45.692553] Extracted PDF Services: ['039214391189']
+[2026-05-05 16:31:47.449862] SUCCESS: Processed 4 rows
+[2026-05-05 16:32:02.756782] --- START UPLOAD: 1189 - adjusted report.pdf ---
+[2026-05-05 16:32:02.758058] Params: WM=6, Year=2026, Month=2
+[2026-05-05 16:32:02.957378] Expected WM No: 039214391189
+[2026-05-05 16:32:02.959236] Temp file saved: D:\DOWNLOADS\energymatrix_uat\Python\uploads\actual_allotment\TEMP_6_1189 - adjusted report.pdf
+[2026-05-05 16:32:03.759535] PDF Header Match: Month=2, Year=2026
+[2026-05-05 16:32:03.870654] Extracted PDF Meta: Month=2, Year=2026, Rows=6
+[2026-05-05 16:32:03.871644] Extracted PDF Services: ['039214391189']
+[2026-05-05 16:32:04.547355] SUCCESS: Processed 4 rows
+[2026-05-05 16:32:18.570828] --- START UPLOAD: 1342 - adjusted report.pdf ---
+[2026-05-05 16:32:18.571784] Params: WM=7, Year=2026, Month=2
+[2026-05-05 16:32:19.196377] Expected WM No: 039224391342
+[2026-05-05 16:32:19.198314] Temp file saved: D:\DOWNLOADS\energymatrix_uat\Python\uploads\actual_allotment\TEMP_7_1342 - adjusted report.pdf
+[2026-05-05 16:32:19.927036] PDF Header Match: Month=2, Year=2026
+[2026-05-05 16:32:20.036309] Extracted PDF Meta: Month=2, Year=2026, Rows=6
+[2026-05-05 16:32:20.037214] Extracted PDF Services: ['039224391342']
+[2026-05-05 16:32:22.061347] SUCCESS: Processed 4 rows
+[2026-05-05 16:32:37.513035] --- START UPLOAD: 1421 - adjusted report.pdf ---
+[2026-05-05 16:32:37.513868] Params: WM=8, Year=2026, Month=2
+[2026-05-05 16:32:38.040728] Expected WM No: 039224391421
+[2026-05-05 16:32:38.043094] Temp file saved: D:\DOWNLOADS\energymatrix_uat\Python\uploads\actual_allotment\TEMP_8_1421 - adjusted report.pdf
+[2026-05-05 16:32:38.827061] PDF Header Match: Month=2, Year=2025
+[2026-05-05 16:32:38.932580] Extracted PDF Meta: Month=2, Year=2025, Rows=6
+[2026-05-05 16:32:38.933326] Extracted PDF Services: ['039224391421']
+[2026-05-05 16:32:38.934400] Mismatch Period: PDF=2/2025 vs UI=2/2026
+[2026-05-05 16:32:54.943516] --- START UPLOAD: 165 - adjusted report.pdf ---
+[2026-05-05 16:32:54.944994] Params: WM=9, Year=2026, Month=2
+[2026-05-05 16:32:55.547951] Expected WM No: 039224320165
+[2026-05-05 16:32:55.549950] Temp file saved: D:\DOWNLOADS\energymatrix_uat\Python\uploads\actual_allotment\TEMP_9_165 - adjusted report.pdf
+[2026-05-05 16:32:56.558282] PDF Header Match: Month=2, Year=2026
+[2026-05-05 16:32:56.691802] Extracted PDF Meta: Month=2, Year=2026, Rows=6
+[2026-05-05 16:32:56.699478] Extracted PDF Services: ['039224320165']
+[2026-05-05 16:32:58.453227] SUCCESS: Processed 4 rows
+[2026-05-05 16:33:16.389905] --- START UPLOAD: solar - adjusted report.pdf ---
+[2026-05-05 16:33:16.390842] Params: WM=10, Year=2026, Month=2
+[2026-05-05 16:33:16.826177] Expected WM No: 059514500104
+[2026-05-05 16:33:16.830159] Temp file saved: D:\DOWNLOADS\energymatrix_uat\Python\uploads\actual_allotment\TEMP_10_solar - adjusted report.pdf
+[2026-05-05 16:33:17.752734] Extracted PDF Meta: Month=None, Year=None, Rows=6
+[2026-05-05 16:33:17.753695] Extracted PDF Services: ['059514500104']
+[2026-05-05 16:33:18.412338] SUCCESS: Processed 4 rows
+[2026-05-05 20:51:12.816195] --- START UPLOAD: 1798 - Adjusted report.pdf ---
+[2026-05-05 20:51:12.817089] Params: WM=2, Year=2026, Month=2
+[2026-05-05 20:51:13.504036] Expected WM No: 039224391798
+[2026-05-05 20:51:13.505707] Temp file saved: D:\DOWNLOADS\energymatrix_uat\Python\uploads\actual_allotment\TEMP_2_1798 - Adjusted report.pdf
+[2026-05-05 20:51:14.332518] PDF Header Match: Month=2, Year=2026
+[2026-05-05 20:51:14.434175] Extracted PDF Meta: Month=2, Year=2026, Rows=6
+[2026-05-05 20:51:14.435102] Extracted PDF Services: ['039224391798']
+[2026-05-05 20:51:16.471229] SUCCESS: Processed 4 rows
+[2026-05-05 20:51:38.112336] --- START UPLOAD: 1145- adjusted report.pdf ---
+[2026-05-05 20:51:38.113376] Params: WM=3, Year=2026, Month=2
+[2026-05-05 20:51:38.304036] Expected WM No: 039214391145
+[2026-05-05 20:51:38.306390] Temp file saved: D:\DOWNLOADS\energymatrix_uat\Python\uploads\actual_allotment\TEMP_3_1145- adjusted report.pdf
+[2026-05-05 20:51:39.070258] PDF Header Match: Month=2, Year=2026
+[2026-05-05 20:51:39.170722] Extracted PDF Meta: Month=2, Year=2026, Rows=6
+[2026-05-05 20:51:39.171833] Extracted PDF Services: ['039214391145']
+[2026-05-05 20:51:40.945237] SUCCESS: Processed 4 rows
+[2026-05-05 21:02:54.975238] --- START UPLOAD: 1798 - Adjusted report.pdf ---
+[2026-05-05 21:02:54.976100] Params: WM=2, Year=2026, Month=2
+[2026-05-05 21:02:55.566078] Expected WM No: 039224391798
+[2026-05-05 21:02:55.567938] Temp file saved: D:\DOWNLOADS\energymatrix_uat\Python\uploads\actual_allotment\TEMP_2_1798 - Adjusted report.pdf
+[2026-05-05 21:02:56.373645] PDF Header Match: Month=2, Year=2026
+[2026-05-05 21:02:56.493275] Extracted PDF Meta: Month=2, Year=2026, Rows=6
+[2026-05-05 21:02:56.494175] Extracted PDF Services: ['039224391798']
+[2026-05-05 21:02:58.637383] SUCCESS: Processed 4 rows
+[2026-05-05 21:03:11.953083] --- START UPLOAD: 1145- adjusted report.pdf ---
+[2026-05-05 21:03:11.953995] Params: WM=3, Year=2026, Month=2
+[2026-05-05 21:03:12.566496] Expected WM No: 039214391145
+[2026-05-05 21:03:12.568443] Temp file saved: D:\DOWNLOADS\energymatrix_uat\Python\uploads\actual_allotment\TEMP_3_1145- adjusted report.pdf
+[2026-05-05 21:03:13.386918] PDF Header Match: Month=2, Year=2026
+[2026-05-05 21:03:13.497228] Extracted PDF Meta: Month=2, Year=2026, Rows=6
+[2026-05-05 21:03:13.498134] Extracted PDF Services: ['039214391145']
+[2026-05-05 21:03:15.739051] SUCCESS: Processed 4 rows
+[2026-05-05 21:03:43.474546] --- START UPLOAD: 1188 - adjustment report.pdf ---
+[2026-05-05 21:03:43.475597] Params: WM=4, Year=2026, Month=2
+[2026-05-05 21:03:44.032782] Expected WM No: 039214391188
+[2026-05-05 21:03:44.034817] Temp file saved: D:\DOWNLOADS\energymatrix_uat\Python\uploads\actual_allotment\TEMP_4_1188 - adjustment report.pdf
+[2026-05-05 21:03:44.834728] PDF Header Match: Month=2, Year=2026
+[2026-05-05 21:03:44.929759] Extracted PDF Meta: Month=2, Year=2026, Rows=6
+[2026-05-05 21:03:44.930653] Extracted PDF Services: ['039214391188']
+[2026-05-05 21:03:46.562028] SUCCESS: Processed 4 rows
+[2026-05-05 21:04:04.746327] --- START UPLOAD: 1344- adjusted report.pdf ---
+[2026-05-05 21:04:04.747453] Params: WM=5, Year=2026, Month=2
+[2026-05-05 21:04:05.143770] Expected WM No: 039224391344
+[2026-05-05 21:04:05.145599] Temp file saved: D:\DOWNLOADS\energymatrix_uat\Python\uploads\actual_allotment\TEMP_5_1344- adjusted report.pdf
+[2026-05-05 21:04:06.163758] PDF Header Match: Month=2, Year=2026
+[2026-05-05 21:04:06.268344] Extracted PDF Meta: Month=2, Year=2026, Rows=6
+[2026-05-05 21:04:06.269310] Extracted PDF Services: ['039224391344']
+[2026-05-05 21:04:07.247602] SUCCESS: Processed 4 rows
+[2026-05-05 21:04:23.240916] --- START UPLOAD: 1189 - adjusted report.pdf ---
+[2026-05-05 21:04:23.241970] Params: WM=6, Year=2026, Month=2
+[2026-05-05 21:04:23.938257] Expected WM No: 039214391189
+[2026-05-05 21:04:23.939943] Temp file saved: D:\DOWNLOADS\energymatrix_uat\Python\uploads\actual_allotment\TEMP_6_1189 - adjusted report.pdf
+[2026-05-05 21:04:24.676317] PDF Header Match: Month=2, Year=2026
+[2026-05-05 21:04:24.772337] Extracted PDF Meta: Month=2, Year=2026, Rows=6
+[2026-05-05 21:04:24.773239] Extracted PDF Services: ['039214391189']
+[2026-05-05 21:04:27.010476] SUCCESS: Processed 4 rows
+[2026-05-05 21:05:03.535031] --- START UPLOAD: 165 - adjusted report.pdf ---
+[2026-05-05 21:05:03.535976] Params: WM=9, Year=2026, Month=2
+[2026-05-05 21:05:04.182948] Expected WM No: 039224320165
+[2026-05-05 21:05:04.184974] Temp file saved: D:\DOWNLOADS\energymatrix_uat\Python\uploads\actual_allotment\TEMP_9_165 - adjusted report.pdf
+[2026-05-05 21:05:04.962611] PDF Header Match: Month=2, Year=2026
+[2026-05-05 21:05:05.079133] Extracted PDF Meta: Month=2, Year=2026, Rows=6
+[2026-05-05 21:05:05.080177] Extracted PDF Services: ['039224320165']
+[2026-05-05 21:05:07.254660] SUCCESS: Processed 4 rows
+[2026-05-05 21:05:28.914639] --- START UPLOAD: solar - adjusted report.pdf ---
+[2026-05-05 21:05:28.916238] Params: WM=10, Year=2026, Month=2
+[2026-05-05 21:05:29.475381] Expected WM No: 059514500104
+[2026-05-05 21:05:29.477161] Temp file saved: D:\DOWNLOADS\energymatrix_uat\Python\uploads\actual_allotment\TEMP_10_solar - adjusted report.pdf
+[2026-05-05 21:05:30.406423] Extracted PDF Meta: Month=None, Year=None, Rows=6
+[2026-05-05 21:05:30.407505] Extracted PDF Services: ['059514500104']
+[2026-05-05 21:05:32.649976] SUCCESS: Processed 4 rows

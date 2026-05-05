@@ -103,8 +103,8 @@ export default function ConsumptionRequest() {
         setDirtyFields(prev => ({ ...prev, [`${idNum}-${field}`]: false }));
         // Strip commas for editing
         setData(prevData => prevData.map(row =>
-            Number(row.service_id) === idNum 
-                ? { ...row, [field]: String(row[field] || "").replace(/,/g, '') } 
+            Number(row.service_id) === idNum
+                ? { ...row, [field]: String(row[field] || "").replace(/,/g, '') }
                 : row
         ));
     };
@@ -112,7 +112,7 @@ export default function ConsumptionRequest() {
     const handleValueChange = (serviceId: any, field: string, value: string) => {
         // Strip commas before validation
         const cleanValue = value.replace(/,/g, '');
-        
+
         if (cleanValue === '') {
             const idNum = Number(serviceId);
             setData(prevData => prevData.map(row =>
@@ -126,7 +126,7 @@ export default function ConsumptionRequest() {
             });
             return;
         }
-        
+
         // Allow up to 10 digits before decimal
         if (!/^\d{0,10}(\.\d{0,2})?$/.test(cleanValue)) return;
 
@@ -253,15 +253,19 @@ export default function ConsumptionRequest() {
                 year: parseInt(selectedYear),
                 month: parseInt(selectedMonth),
                 day: new Date().getDate(),
-                requests: modifiedRows.map(row => ({
+                requests: modifiedRows.map(row => {
+                    const p = (v: any) => Number(String(v || "0").replace(/,/g, '')) || 0;
+                    const c1 = p(row.c1);
+                    const c2 = p(row.c2);
+                    const c4 = p(row.c4);
+                    const c5 = p(row.c5);
+                    return {
                         customer_id: row.customer_id,
                         service_id: row.service_id,
-                        c1: Number(row.c1) || 0,
-                        c2: Number(row.c2) || 0,
-                        c4: Number(row.c4) || 0,
-                        c5: Number(row.c5) || 0,
-                        total: (Number(row.c1) || 0) + (Number(row.c2) || 0) + (Number(row.c4) || 0) + (Number(row.c5) || 0)
-                    }))
+                        c1, c2, c4, c5,
+                        total: c1 + c2 + c4 + c5
+                    };
+                })
             };
 
             if (payload.requests.length === 0) {
@@ -452,11 +456,17 @@ export default function ConsumptionRequest() {
                                                 />
                                             </TableCell>
                                             <TableCell className="py-2 p-1">
-                                                <Input
-                                                    readOnly
-                                                    className="h-8 text-right text-sm border-slate-200 shadow-none focus-visible:ring-1 bg-slate-50 text-slate-700 font-semibold"
-                                                    value={(Number(row.c1) + Number(row.c2) + Number(row.c4) + Number(row.c5)).toLocaleString()}
-                                                />
+                                                {(() => {
+                                                    const p = (v: any) => Number(String(v || "0").replace(/,/g, '')) || 0;
+                                                    const total = p(row.c1) + p(row.c2) + p(row.c4) + p(row.c5);
+                                                    return (
+                                                        <Input
+                                                            readOnly
+                                                            className="h-8 text-right text-sm border-slate-200 shadow-none focus-visible:ring-1 bg-slate-50 text-slate-700 font-semibold"
+                                                            value={total.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                                                        />
+                                                    );
+                                                })()}
                                             </TableCell>
                                         </TableRow>
                                     ))}

@@ -92,6 +92,8 @@ async def generate_invoice(data: dict, user: dict = Depends(get_current_user)):
                     ("Scheduling chrgs", "scheduling"),
                     ("DSM Charges", "dsm"),
                     ("Wheeling", "wheeling"),
+                    ("Other Charges", "other"),
+                    ("Selfenergy chrgs", "tax"),
                 ]
 
                 d_map = {}
@@ -108,8 +110,7 @@ async def generate_invoice(data: dict, user: dict = Depends(get_current_user)):
                     calc = f"{w:,.2f} (Windmill) + {s:,.2f} (Solar) = {total:,.2f}"
                     d_map[label] = {"amount": total, "calc": calc}
 
-                # Self Energy Tax
-                d_map["Selfenergy chrgs"] = {"amount": actual_tax, "calc": f"Summed from actual table = {actual_tax:,.2f}"}
+                # Self Energy Tax (handled via charge_fields map)
                 
                 total_charges = sum(v["amount"] for k, v in d_map.items() if k not in ["Units", "Rate"])
                 net_units_value = units * rate

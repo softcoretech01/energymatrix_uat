@@ -317,47 +317,65 @@ export default function CustomerEdit(): JSX.Element {
             return;
         }
 
-        let isDuplicate = false;
-        setSeNumbers(prev => {
-            const exists = prev.some(se => {
+        // Add new SE row
+        try {
+            // Optional: local duplicate check before sending to server
+            const isDuplicate = seNumbers.some(se => {
                 const rowSeNum = (se.service_number ?? se.se_number ?? se.seNumber)?.toString().trim();
-                const rowKvaId = (se.kva_id ?? kvaList.find(k => (k.kva || k.capacity) === se.kva)?.id ?? se.kva)?.toString();
-                const rowEdcId = (se.edc_circle_id ?? se.edc_circle ?? se.edcCircle)?.toString();
-
-                return rowSeNum === newSeNumber.toString().trim() &&
-                    rowKvaId === (newKva || "").toString() &&
-                    rowEdcId === (newEdcCircle || "").toString();
+                return rowSeNum === newSeNumber.toString().trim();
             });
 
-            if (exists) {
-                isDuplicate = true;
-                return prev;
+            if (isDuplicate) {
+                toast.error("This Service Number is already added for this customer.");
+                return;
             }
 
-            return [
-                ...prev,
-                {
-                    id: Date.now(),
-                    seNumber: newSeNumber,
-                    kva: newKva,
-                    edcCircle: newEdcCircle,
-                    remarks: newSeRemarks,
-                    status: newSeStatus,
-                    isNew: true,
+            const sePayload = {
+                se_number: newSeNumber,
+                kva: newKva,
+                edc_circle: newEdcCircle,
+                status: newSeStatus === "active" ? 1 : 0,
+                remarks: newSeRemarks,
+                is_submitted: 1, 
+            };
+            const res = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/customers/${id}/se`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
                 },
-            ];
-        });
+                body: JSON.stringify(sePayload),
+            });
+            if (!res.ok) {
+                const text = await res.text();
+                throw new Error(text || `HTTP ${res.status}`);
+            }
 
-        if (isDuplicate) {
-            toast.error("This Service Number with the same KVA and EDC Circle is already added.");
-            return;
+            // Refresh SE list from backend
+            const seRes = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/customers/${id}/se`, {
+                headers: {
+                    "Content-Type": "application/json",
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
+            });
+            if (seRes.ok) {
+                const seData = await seRes.json();
+                const normalized = Array.isArray(seData)
+                    ? seData.map((item: any) => ({ ...item, isNew: false }))
+                    : [];
+                setSeNumbers(normalized);
+            }
+
+            setNewSeNumber("");
+            setNewKva("");
+            setNewEdcCircle("");
+            setNewSeRemarks("");
+            setNewSeStatus("active");
+            toast.success("Service Number added successfully.");
+        } catch (err: any) {
+            toast.error("Failed to add service number: " + err.message);
+            console.error("Add SE error:", err);
         }
-
-        setNewSeNumber("");
-        setNewKva("");
-        setNewEdcCircle("");
-        setNewSeRemarks("");
-        setNewSeStatus("active");
     };
 
     const handleAddContact = async () => {
@@ -920,10 +938,10 @@ export default function CustomerEdit(): JSX.Element {
                                 <div className="md:col-span-12 flex justify-end pt-2">
                                     <Button
                                         onClick={handleAddSeNumber}
-                                        className={cn("bg-cyan-700 hover:bg-cyan-800 text-white gap-2", isPosted && "opacity-50 cursor-not-allowed")}
+                                        className="bg-cyan-700 hover:bg-cyan-800 text-white gap-2"
                                         disabled={isReadOnly}
                                     >
-                                        <UserPlus className="h-4 w-4" /> Add
+                                        <UserPlus className="h-4 w-4" /> {editSeId !== null ? "Update" : "Add"}
                                     </Button>
                                 </div>
                             </div>
@@ -978,7 +996,7 @@ export default function CustomerEdit(): JSX.Element {
                                                         <Button
                                                             variant="ghost"
                                                             size="icon"
-                                                            className={cn("h-8 w-8 text-blue-500 hover:bg-blue-50", isPosted && "opacity-50 cursor-not-allowed")}
+                                                            className="h-8 w-8 text-blue-500 hover:bg-blue-50"
                                                             disabled={isReadOnly}
                                                             onClick={() => {
                                                                 setEditSeId(item.id);
@@ -1037,7 +1055,7 @@ export default function CustomerEdit(): JSX.Element {
                                 <div className="md:col-span-4">
                                     <Button
                                         onClick={handleAddContact}
-                                        className={cn("w-full bg-indigo-600 hover:bg-indigo-700 text-white h-10", isPosted && "opacity-50 cursor-not-allowed")}
+                                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white h-10"
                                         disabled={isReadOnly}
                                     >
                                         <UserPlus className="h-4 w-4 mr-2" /> Add
@@ -1075,7 +1093,7 @@ export default function CustomerEdit(): JSX.Element {
                                                         <Button
                                                             variant="ghost"
                                                             size="icon"
-                                                            className={cn("h-8 w-8 text-blue-500 hover:bg-blue-50", isPosted && "opacity-50 cursor-not-allowed")}
+                                                            className="h-8 w-8 text-blue-500 hover:bg-blue-50"
                                                             disabled={isReadOnly}
                                                             onClick={() => {
                                                                 setNewContactPerson(
