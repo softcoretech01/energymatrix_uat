@@ -100,6 +100,44 @@ function EnergyAllotment() {
     const [isSaving, setIsSaving] = useState(false);
 
     const [activeTab, setActiveTab] = useState("list");
+
+    // Refs for dual-scroll sync
+    const topScrollRef = React.useRef<HTMLDivElement>(null);
+    const tableContainerRef = React.useRef<HTMLDivElement>(null);
+    const [tableScrollWidth, setTableScrollWidth] = useState(0);
+
+    useEffect(() => {
+        const topScroll = topScrollRef.current;
+        const tableContainer = tableContainerRef.current;
+
+        if (topScroll && tableContainer) {
+            const syncTopScroll = () => {
+                if (Math.abs(topScroll.scrollLeft - tableContainer.scrollLeft) > 1) {
+                    topScroll.scrollLeft = tableContainer.scrollLeft;
+                }
+            };
+            const syncTableScroll = () => {
+                if (Math.abs(tableContainer.scrollLeft - topScroll.scrollLeft) > 1) {
+                    tableContainer.scrollLeft = topScroll.scrollLeft;
+                }
+            };
+
+            topScroll.addEventListener('scroll', syncTableScroll);
+            tableContainer.addEventListener('scroll', syncTopScroll);
+
+            // Observer to keep widths in sync
+            const resizeObserver = new ResizeObserver(() => {
+                setTableScrollWidth(tableContainer.scrollWidth);
+            });
+            resizeObserver.observe(tableContainer);
+
+            return () => {
+                topScroll.removeEventListener('scroll', syncTableScroll);
+                tableContainer.removeEventListener('scroll', syncTopScroll);
+                resizeObserver.disconnect();
+            };
+        }
+    }, [activeTab]);
     const [selectedWindmillId, setSelectedWindmillId] = useState<string>("");
     // Dynamic lists for dropdowns
     const [customerList, setCustomerList] = useState<string[]>([]);
@@ -364,6 +402,7 @@ function EnergyAllotment() {
     const [energyAllotmentData, setEnergyAllotmentData] = useState<(typeof allotmentData[0] & Record<string, any>)[]>(allotmentData);
     const [consumptionRequests, setConsumptionRequests] = useState<any[]>([]);
     const [ebSummaryData, setEbSummaryData] = useState<Record<string, any>>({});
+    const [originalEbSummary, setOriginalEbSummary] = useState<Record<string, any>>({});
     const [solarWindmills, setSolarWindmills] = useState<any[]>([]);
 
     // Memoized Grid Logic for high performance
@@ -766,18 +805,101 @@ function EnergyAllotment() {
             if (response.data && response.data.status === "success") {
                 const summaryData = response.data.data;
                 console.log("✅ EB Summary fetched successfully:", summaryData);
-                setEbSummaryData(summaryData);
+                // We only set originalEbSummary here; ebSummaryData is derived via useEffect
+                setOriginalEbSummary(summaryData);
             } else {
                 console.warn("⚠️ EB Summary response was not successful:", response.data);
+                setOriginalEbSummary({});
             }
         } catch (error: any) {
             console.error("❌ Error fetching EB statement summary:", error?.response?.data || error.message);
+            setOriginalEbSummary({});
         }
     };
 
     useEffect(() => {
         fetchEbStatementSummary();
     }, [selectedYear, selectedMonth]);
+
+    // ── NEW: Robust Balance Recalculation Effect ──
+    // This ensures headers (P:/B:) always reflect (Original Pool - Total Grid Allotments)
+    useEffect(() => {
+        if (!originalEbSummary || Object.keys(originalEbSummary).length === 0) {
+            setEbSummaryData({});
+            setBorrowedAmounts({});
+            return;
+        }
+
+        const newSummary = JSON.parse(JSON.stringify(originalEbSummary));
+        const newBorrows: Record<string, any> = {};
+
+        // Process rows in the same order as they appear in the UI to ensure deterministic borrowing
+        const { order } = memoizedGridData;
+        const cascadePartners: Record<string, string[]> = {
+            c1: ['c2', 'c4'],
+            c2: ['c1', 'c4'],
+            c5: ['c4'],
+            c4: [],
+        };
+
+        order.forEach(rowKey => {
+            // Find all windmill entries for this Customer/SE pair
+            const items = energyAllotmentData.filter(d =>
+                String(d.customer || '').trim() === rowKey.customer &&
+                d.seNumber === rowKey.seNumber
+            );
+
+            items.forEach(item => {
+                const wm = item.wm;
+                if (!wm || !newSummary[wm]) return;
+
+                ['c1', 'c2', 'c4', 'c5'].forEach(slot => {
+                    const val = parseFloat(stripCommas(item[slot])) || 0;
+                    if (val === 0) return;
+
+                    const borrowKey = `${rowKey.customer}|${rowKey.seNumber}|${wm}|${slot}`;
+                    const partners = cascadePartners[slot] ?? [];
+
+                    // 1. Consume own slot first
+                    const ownPP = Number(newSummary[wm][`${slot}_pp`]) || 0;
+                    const ownBank = Number(newSummary[wm][`${slot}_bank`]) || 0;
+
+                    const ownPPConsumed = Math.min(val, ownPP);
+                    let deficit = val - ownPPConsumed;
+                    const ownBankConsumed = Math.min(deficit, ownBank);
+                    deficit -= ownBankConsumed;
+
+                    newSummary[wm][`${slot}_pp`] = ownPP - ownPPConsumed;
+                    newSummary[wm][`${slot}_bank`] = ownBank - ownBankConsumed;
+
+                    const slotBorrows: Record<string, { pp: number; bank: number }> = {
+                        _own: { pp: ownPPConsumed, bank: ownBankConsumed }
+                    };
+
+                    // 2. Cascade through partners
+                    for (const p of partners) {
+                        if (deficit <= 0) break;
+                        const pPP = Number(newSummary[wm][`${p}_pp`]) || 0;
+                        const pBank = Number(newSummary[wm][`${p}_bank`]) || 0;
+
+                        const consumedPP = Math.min(deficit, pPP);
+                        deficit -= consumedPP;
+                        const consumedBank = Math.min(deficit, pBank);
+                        deficit -= consumedBank;
+
+                        newSummary[wm][`${p}_pp`] = pPP - consumedPP;
+                        newSummary[wm][`${p}_bank`] = pBank - consumedBank;
+                        slotBorrows[p] = { pp: consumedPP, bank: consumedBank };
+                    }
+
+                    newBorrows[borrowKey] = slotBorrows;
+                });
+            });
+        });
+
+        setEbSummaryData(newSummary);
+        setBorrowedAmounts(newBorrows);
+    }, [energyAllotmentData, originalEbSummary, memoizedGridData.order]);
 
     const autoLoadAllAllotments = React.useCallback(async () => {
         if (!selectedYear || !selectedMonth || !fullCustomerData || fullCustomerData.length === 0) return;
@@ -1113,20 +1235,29 @@ function EnergyAllotment() {
 
 
                 if (rowsWithData.length > 0) {
+                    const totalRows = rowsWithData.length;
+                    toast.info(`Saving ${totalRows} energy allotment records...`);
+
                     for (const row of rowsWithData) {
                         try {
-                            const resolvedCustomerId = parseInt(String(
-                                row.customer_id || row.id || row.cust_id || row.mc_id || 0
-                            )) || 0;
-
-                            if (resolvedCustomerId === 0) {
-                                skippedCount++;
-                                continue;
-                            }
-
                             const wm = row.wm;
                             const windmillObj = windmillsDetailed.find(w => w.windmill_number === wm);
                             const resolvedWindmillId = ebSummaryData[wm]?.windmill_id || windmillObj?.id || 0;
+
+                            // Resolve customer and service IDs robustly
+                            const masterInfo = fullCustomerData.find(c =>
+                                String(c.customer_name || "").trim() === String(row.customer || "").trim() &&
+                                String(c.service_number || "").trim() === String(row.seNumber || "").trim()
+                            );
+
+                            const resolvedCustomerId = row.customer_id || masterInfo?.id || 0;
+                            const resolvedServiceId = row.service_id || masterInfo?.service_id || 0;
+
+                            if (resolvedCustomerId === 0 || resolvedWindmillId === 0) {
+                                console.warn(`Missing IDs for row: ${row.customer}. Cust: ${resolvedCustomerId}, WM: ${resolvedWindmillId}`);
+                                skippedCount++;
+                                continue;
+                            }
 
                             const slots = ['c1', 'c2', 'c4', 'c5'];
                             const splitValues: any = {};
@@ -1136,7 +1267,7 @@ function EnergyAllotment() {
                                 const oldPP = parseFloat(row[`${slot}_pp`]) || 0;
                                 const oldBank = parseFloat(row[`${slot}_bank`]) || 0;
 
-                                // 1. Use own pool first
+                                // Use own pool first (from fresh server state)
                                 let availOwnPP = (parseFloat(runningBalance[wm]?.[`${slot}_pp`]) || 0) + oldPP;
                                 let useOwnPP = Math.min(rem, availOwnPP);
                                 rem -= useOwnPP;
@@ -1147,7 +1278,7 @@ function EnergyAllotment() {
                                 rem -= useOwnBN;
                                 if (runningBalance[wm]) runningBalance[wm][`${slot}_bank`] = availOwnBN - useOwnBN;
 
-                                // 2. Borrow from partner if needed
+                                // Borrow from partner if needed
                                 let usePartPP = 0;
                                 let usePartBN = 0;
                                 const partner = PARTNER_SLOT[slot];
@@ -1173,7 +1304,7 @@ function EnergyAllotment() {
                                 allotment_date: new Date().toISOString().split('T')[0],
                                 customer_id: resolvedCustomerId,
                                 windmill_id: resolvedWindmillId,
-                                service_id: row.service_id || 0,
+                                service_id: resolvedServiceId,
                                 service_number: row.seNumber ? String(row.seNumber).trim() : null,
                                 c1_power: splitValues.c1_power,
                                 c1_banking: splitValues.c1_banking,
@@ -1185,7 +1316,7 @@ function EnergyAllotment() {
                                 c5_banking: splitValues.c5_banking,
                                 requested_power: parseFloat(stripCommas(row.consumption)) || 0,
                                 requested_banking: 0,
-                                allocated_power: parseFloat(stripCommas(row.c1_allot)) || 0,
+                                allocated_power: parseFloat(stripCommas(row.c1)) || 0, // Using actual current value
                                 allocated_banking: 0,
                                 utilized_power: 0,
                                 utilized_banking: 0
@@ -1203,60 +1334,46 @@ function EnergyAllotment() {
                         }
                     }
 
-                    setEnergyAllotmentData(prev => prev.map(row => ({
-                        ...row,
-                        c1_allot: row.c1,
-                        c2_allot: row.c2,
-                        c4_allot: row.c4,
-                        c5_allot: row.c5
-                    })));
+                    // Update UI state to reflect saved values
+                    setEnergyAllotmentData(prev => prev.map(row => {
+                        const updated = rowsWithData.find(r => r.customer === row.customer && r.seNumber === row.seNumber && r.wm === row.wm);
+                        if (updated) {
+                            return {
+                                ...row,
+                                c1_allot: updated.c1,
+                                c2_allot: updated.c2,
+                                c4_allot: updated.c4,
+                                c5_allot: updated.c5
+                            };
+                        }
+                        return row;
+                    }));
+
+                    if (successCount > 0) toast.success(`Successfully saved ${successCount} allotments.`);
+                    if (errorCount > 0) toast.error(`Failed to save ${errorCount} allotments.`);
                 }
 
-                // 3. Final Balance Sync (Always runs to capture manual edits or final calculated state)
+                // 3. Final Balance Sync
                 const windmillNumbers = Object.keys(ebSummaryData);
                 if (windmillNumbers.length > 0) {
                     try {
                         const balancePayload = {
-                            windmill_id: parseInt(selectedWindmillId || "0"),
                             year: parseInt(selectedYear),
                             month: parseInt(selectedMonth),
                             balances: windmillNumbers.flatMap(wm => ['c1', 'c2', 'c4', 'c5'].map(slot => {
-                                const currentPP = parseFloat(ebSummaryData[wm]?.[`${slot}_pp`]) || 0;
-                                const currentBank = parseFloat(ebSummaryData[wm]?.[`${slot}_bank`]) || 0;
-
-                                const wmItems = energyAllotmentData.filter(row => row.wm === wm);
-                                const totalAllocated = wmItems.reduce((acc, curr) => acc + (parseFloat(String(curr[slot]).replace(/,/g, '')) || 0), 0);
-                                const totalSaved = wmItems.reduce((acc, curr) => acc + (parseFloat(String(curr[`${slot}_allot`] || '0').replace(/,/g, '')) || 0), 0);
-
-                                // Calculate Net Change in allotment for this session
-                                const diff = totalAllocated - totalSaved;
-
-                                let remainingPP = currentPP;
-                                let remainingBank = currentBank;
-
-                                if (diff > 0) {
-                                    // Allotting MORE: subtract from PP first, then Bank
-                                    const fromPP = Math.min(diff, remainingPP);
-                                    remainingPP -= fromPP;
-                                    remainingBank = Math.max(remainingBank - (diff - fromPP), 0);
-                                } else if (diff < 0) {
-                                    // Allotting LESS: return units to PP
-                                    remainingPP += Math.abs(diff);
-                                }
-
+                                // Send the calculated remaining balance from ebSummaryData
                                 return {
                                     wm,
                                     slot,
-                                    pp: Math.round(remainingPP),
-                                    bank: Math.round(remainingBank)
+                                    pp: Math.round(Number(ebSummaryData[wm]?.[`${slot}_pp`])),
+                                    bank: Math.round(Number(ebSummaryData[wm]?.[`${slot}_bank`]))
                                 };
                             }))
                         };
                         await api.post("/windmills/energy-allotment/update-balance", balancePayload);
-                        console.log("✅ Final balances synced to database successfully.");
+                        console.log("✅ Final balances synced successfully.");
                     } catch (balError) {
-                        console.error("❌ Failed to sync final balances:", balError);
-                        if (successCount > 0) toast.error("Allotments saved, but balance sync failed.");
+                        console.error("❌ Failed to sync balances:", balError);
                     }
                 }
                 await fetchEbStatementSummary();
@@ -1625,54 +1742,8 @@ function EnergyAllotment() {
         const partners = cascadePartners[field] ?? [];
 
         if (['c1', 'c2', 'c4', 'c5'].includes(field)) {
-            const borrowKey = `${customer}|${seNumber}|${wm}|${field}`;
-            const prevBorrows = (borrowedAmounts as any)[borrowKey] || {};
-
-            // Step 1a – restore previous OWN consumption to own headers
-            const prevOwn = prevBorrows['_own'] || { pp: 0, bank: 0 };
-            const restoredOwnPP   = (Number(ebSummaryData[wm]?.[`${field}_pp`])   || 0) + prevOwn.pp;
-            const restoredOwnBank = (Number(ebSummaryData[wm]?.[`${field}_bank`]) || 0) + prevOwn.bank;
-
-            // Step 1b – restore previous partner borrows to partner headers
-            const restoredPartner: Record<string, { pp: number; bank: number }> = {};
-            for (const p of partners) {
-                const prev = prevBorrows[p] || { pp: 0, bank: 0 };
-                restoredPartner[p] = {
-                    pp:   (Number(ebSummaryData[wm]?.[`${p}_pp`])   || 0) + prev.pp,
-                    bank: (Number(ebSummaryData[wm]?.[`${p}_bank`]) || 0) + prev.bank,
-                };
-            }
-
-            // Step 2 – consume own PP first, then own Bank
-            const ownPPConsumed   = Math.min(typedValue, restoredOwnPP);
-            let deficit           = typedValue - ownPPConsumed;
-            const ownBankConsumed = Math.min(deficit, restoredOwnBank);
-            deficit              -= ownBankConsumed;
-
-            // Step 3 – cascade through partners PP then Bank
-            const newBorrows: Record<string, { pp: number; bank: number }> = {
-                _own: { pp: ownPPConsumed, bank: ownBankConsumed }
-            };
-            for (const p of partners) {
-                if (deficit <= 0) { newBorrows[p] = { pp: 0, bank: 0 }; continue; }
-                const bPP   = Math.min(deficit, restoredPartner[p].pp);   deficit -= bPP;
-                const bBank = Math.min(deficit, restoredPartner[p].bank); deficit -= bBank;
-                newBorrows[p] = { pp: bPP, bank: bBank };
-            }
-
-            // Step 4 – apply deductions to OWN headers + all partner headers
-            const ebUpdates: Record<string, any> = { ...(ebSummaryData[wm] || {}) };
-            ebUpdates[`${field}_pp`]   = restoredOwnPP   - ownPPConsumed;
-            ebUpdates[`${field}_bank`] = restoredOwnBank - ownBankConsumed;
-            for (const p of partners) {
-                const b = newBorrows[p] || { pp: 0, bank: 0 };
-                ebUpdates[`${p}_pp`]   = restoredPartner[p].pp   - b.pp;
-                ebUpdates[`${p}_bank`] = restoredPartner[p].bank - b.bank;
-            }
-            setEbSummaryData(prev => ({ ...prev, [wm]: ebUpdates }));
-
-            // Step 5 – persist for future undo
-            setBorrowedAmounts(prev => ({ ...prev, [borrowKey]: newBorrows }));
+            // Balance deduction is now handled centrally by the recalculation effect
+            // which reacts to changes in energyAllotmentData.
         }
         // ──────────────────────────────────────────────────────────────────────
 
@@ -1690,15 +1761,23 @@ function EnergyAllotment() {
             newData[index] = updated;
             setEnergyAllotmentData(newData);
         } else {
-            // Create new entry — carry customer_id from the sibling (same customer+SE, different WM)
-            const sibling = energyAllotmentData.find(d => d.customer === customer && d.seNumber === seNumber);
-            const resolvedCustId = sibling?.customer_id || sibling?.id || sibling?.cust_id || sibling?.mc_id || 0;
+            // Create new entry — carry customer_id and service_id from master data or sibling
+            const sibling = energyAllotmentData.find(d => String(d.customer || '').trim() === customer && String(d.seNumber || '').trim() === seNumber);
+
+            const masterInfo = fullCustomerData.find(c =>
+                String(c.customer_name || "").trim() === customer &&
+                String(c.service_number || "").trim() === seNumber
+            );
+
+            const resolvedCustId = sibling?.customer_id || masterInfo?.id || 0;
+            const resolvedServiceId = sibling?.service_id || masterInfo?.service_id || 0;
+
             const newEntry: any = {
                 wm,
                 customer,
                 seNumber,
                 customer_id: resolvedCustId,
-                service_id: sibling?.service_id || 0,
+                service_id: resolvedServiceId,
                 consumption: sibling ? sibling.consumption : "0",
                 c1: "0", c1_pp: "0", c1_bank: "0",
                 c2: "0", c2_pp: "0", c2_bank: "0",
@@ -1716,6 +1795,28 @@ function EnergyAllotment() {
 
             setEnergyAllotmentData([...energyAllotmentData, newEntry]);
         }
+    };
+
+    const handleGridBlur = (customer: string, seNumber: string, wm: string, field: string, value: string) => {
+        const cleanValue = stripCommas(value);
+        if (!cleanValue || isNaN(Number(cleanValue))) return;
+
+        const windmillObj = windmillsDetailed.find(w => w.windmill_number === wm);
+        const lossPercent = parseFloat(windmillObj?.transmission_loss) || 0;
+
+        if (lossPercent === 0) return;
+
+        const originalValue = parseFloat(cleanValue) || 0;
+        // Formula: Value + (Value * lossPercent / 100)
+        const increasedValue = originalValue * (1 + (lossPercent / 100));
+
+        // Round to 2 decimals
+        const finalValue = Math.round(increasedValue * 100) / 100;
+
+        // Update the grid with the increased value
+        handleGridUpdate(customer, seNumber, wm, field, finalValue.toString());
+
+
     };
 
 
@@ -1832,38 +1933,54 @@ function EnergyAllotment() {
                                                 <span className="font-bold text-red-500">B</span>
                                                 <span className="text-slate-600">- Banking Units</span>
                                             </div>
+                                            <div className="flex items-center gap-1.5 text-xs font-medium border-l pl-4 ml-2 border-slate-200">
+                                                <span className="text-[10px] font-semibold text-[#CB4154] bg-red-50 px-2 py-0.5 rounded border border-red-100">
+                                                    * Note: Allocated values automatically include transmission loss from master.
+                                                </span>
+                                            </div>
                                         </div>
                                         <div className="text-[11px] font-bold text-indigo-600 pr-4 flex items-center gap-2">
                                             <span className="text-slate-400 font-normal">Borrowing:</span>
                                             C1 <span className="text-indigo-400">{"<--->"}</span> C2 and C4 <span className="text-indigo-400">{"--->"}</span> C5
                                         </div>
                                     </div>
-                                    <div className="border border-slate-200 rounded-b-lg mt-0 bg-white overflow-x-auto thin-scrollbar" style={{ maxWidth: open ? 'calc(100vw - 18rem)' : 'calc(100vw - 5rem)' }}>
+                                    {/* Top Scrollbar Sync */}
+                                    <div
+                                        ref={topScrollRef}
+                                        className="overflow-x-scroll border-x border-slate-200 bg-white thin-scrollbar sticky top-0 z-[60]"
+                                        style={{ height: '10px', maxWidth: open ? 'calc(100vw - 18rem)' : 'calc(100vw - 5rem)' }}
+                                    >
+                                        <div style={{ width: `${tableScrollWidth}px`, height: '1px' }} />
+                                    </div>
+                                    <div
+                                        ref={tableContainerRef}
+                                        className="border border-slate-200 rounded-b-lg mt-0 bg-white overflow-scroll thin-scrollbar max-h-[calc(100vh-180px)]"
+                                        style={{ maxWidth: open ? 'calc(100vw - 18rem)' : 'calc(100vw - 5rem)' }}
+                                    >
                                         <Table noWrapper className="min-w-full" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
-                                            <TableHeader className="bg-sidebar sticky top-0 z-40">
-                                                <TableRow>
-                                                    <TableHead rowSpan={2} className="h-10 font-semibold text-white whitespace-nowrap min-w-[120px] w-[120px] border-r border-white/20 bg-sidebar sticky left-0 z-50">Customer</TableHead>
-                                                    <TableHead rowSpan={2} className="h-10 font-semibold text-white whitespace-nowrap min-w-[120px] w-[120px] border-r border-white/20 bg-sidebar sticky left-[120px] z-50">Service Number</TableHead>
-                                                    <TableHead rowSpan={2} className="h-10 font-semibold text-white whitespace-nowrap min-w-[120px] w-[120px] border-r border-white/20 bg-sidebar sticky left-[240px] z-50"></TableHead>
-                                                    {/* Dynamic Generator Columns */}
+                                            <TableHeader className="bg-sidebar">
+                                                <TableRow className="bg-sidebar h-[50px]">
+                                                    <TableHead rowSpan={2} className="font-semibold text-white whitespace-nowrap min-w-[120px] w-[120px] border-r border-white/20 bg-sidebar sticky top-0 left-0 z-50 h-[130px]">Customer</TableHead>
+                                                    <TableHead rowSpan={2} className="font-semibold text-white whitespace-nowrap min-w-[120px] w-[120px] border-r border-white/20 bg-sidebar sticky top-0 left-[120px] z-50 h-[130px]">Service Number</TableHead>
+                                                    <TableHead rowSpan={2} className="font-semibold text-white whitespace-nowrap min-w-[120px] w-[120px] border-r border-white/20 bg-sidebar sticky top-0 left-[240px] z-50 h-[130px]"></TableHead>
                                                     {windmillNumbers.map((wm) => {
                                                         return (
-                                                            <TableHead key={wm} colSpan={4} className="h-auto font-semibold text-center border-b border-r border-slate-400 last:border-r-0 p-0 align-top bg-white">
-                                                                <div className="bg-sidebar text-white h-full flex items-center justify-center py-2">
+                                                            <TableHead key={wm} colSpan={4} className="font-semibold text-center border-b border-r border-white/20 p-0 bg-sidebar sticky top-0 z-40 h-[50px]">
+                                                                <div className="text-white h-full flex items-center justify-center">
                                                                     {wm}
                                                                 </div>
                                                             </TableHead>
                                                         );
                                                     })}
-                                                    <TableHead rowSpan={2} className="h-10 font-semibold text-white text-center border-b border-r border-white/20 align-middle">Total</TableHead>
+                                                    <TableHead rowSpan={2} className="font-semibold text-white text-center border-b border-r border-white/20 align-middle sticky top-0 right-0 z-50 bg-sidebar h-[130px]">Total</TableHead>
                                                 </TableRow>
-                                                <TableRow className="bg-sidebar/85 hover:bg-sidebar/85 border-b-0">
+                                                <TableRow className="bg-sidebar h-[80px]">
                                                     {windmillNumbers.map((wm) => {
                                                         const wmItems = energyAllotmentData.filter(d => d.wm === wm);
                                                         const renderColHeader = (col: 'c1' | 'c2' | 'c4' | 'c5', label: string, isLast = false) => {
 
-                                                            const displayPower = ebSummaryData[wm] ? Number(ebSummaryData[wm][`${col}_pp`]) || 0 : 0;
-                                                            const displayBank = ebSummaryData[wm] ? Number(ebSummaryData[wm][`${col}_bank`]) || 0 : 0;
+                                                            const displayPower = ebSummaryData[wm] ? Math.round(Number(ebSummaryData[wm][`${col}_pp`])) || 0 : 0;
+                                                            const displayBank = ebSummaryData[wm] ? Math.round(Number(ebSummaryData[wm][`${col}_bank`])) || 0 : 0;
 
                                                             const handleManualUpdate = (col: string, type: 'pp' | 'bank', newVal: string) => {
                                                                 const cleanVal = stripCommas(newVal);
@@ -1876,28 +1993,28 @@ function EnergyAllotment() {
                                                             };
 
                                                             return (
-                                                                <TableHead key={`${wm}-${col}`} className={`p-1 pt-1.5 pb-1 text-xs font-semibold text-white text-center border-r ${isLast ? 'border-white/20 last:border-r-0' : 'border-white/10'} align-bottom`}>
-                                                                    <div className="flex flex-col gap-1.5 mb-2 items-start w-fit mx-auto">
+                                                                <TableHead key={`${wm}-${col}`} className={`p-1 text-xs font-semibold text-white text-center border-r ${isLast ? 'border-white/20 last:border-r-0' : 'border-white/10'} align-middle sticky top-[50px] z-40 bg-sidebar h-[80px]`}>
+                                                                    <div className="flex flex-col gap-1 items-start w-fit mx-auto mb-1">
                                                                         <div className="flex items-center gap-1.5">
-                                                                            <span className="text-xs text-white font-bold w-4 text-right">P:</span>
+                                                                            <span className="text-[10px] text-white font-bold w-4 text-right">P:</span>
                                                                             <input
                                                                                 type="text"
                                                                                 value={formatWithCommas(displayPower)}
                                                                                 onChange={(e) => handleManualUpdate(col, 'pp', e.target.value)}
-                                                                                className="border border-black px-1 bg-white text-red-500 w-[65px] text-center font-bold h-[24px] text-xs focus:outline-none"
+                                                                                className="border border-black px-1 bg-white text-red-500 w-[60px] text-center font-bold h-[22px] text-[10px] focus:outline-none"
                                                                             />
                                                                         </div>
                                                                         <div className="flex items-center gap-1.5">
-                                                                            <span className="text-xs text-white font-bold w-4 text-right">B:</span>
+                                                                            <span className="text-[10px] text-white font-bold w-4 text-right">B:</span>
                                                                             <input
                                                                                 type="text"
                                                                                 value={formatWithCommas(displayBank)}
                                                                                 onChange={(e) => handleManualUpdate(col, 'bank', e.target.value)}
-                                                                                className="border border-black px-1 bg-white text-red-500 w-[65px] text-center font-bold h-[24px] text-xs focus:outline-none"
+                                                                                className="border border-black px-1 bg-white text-red-500 w-[60px] text-center font-bold h-[22px] text-[10px] focus:outline-none"
                                                                             />
                                                                         </div>
                                                                     </div>
-                                                                    <div className="pb-0.5">{label}</div>
+                                                                    <div className="text-[10px] uppercase opacity-80">{label}</div>
                                                                 </TableHead>
                                                             );
                                                         };
@@ -1912,6 +2029,69 @@ function EnergyAllotment() {
                                                         );
                                                     })}
                                                 </TableRow>
+                                                {/* Power Plant Row */}
+                                                <TableRow className="bg-[#e0f2fe] border-b border-white hover:bg-[#e0f2fe] h-[40px]">
+                                                    <TableHead colSpan={3} className="py-2 text-sm text-[#0369a1] font-bold border-r bg-[#e0f2fe] align-middle sticky top-[130px] left-0 z-50 text-center uppercase tracking-wide h-[40px]">
+                                                        Power Plant
+                                                    </TableHead>
+                                                    {windmillNumbers.map((wm) => {
+                                                        const renderC = (col: 'c1' | 'c2' | 'c4' | 'c5') => {
+                                                            const totalPP = originalEbSummary && originalEbSummary[wm] ? Math.round(Number(originalEbSummary[wm][`${col}_pp`])) || 0 : 0;
+                                                            return <TableHead key={`${wm}-${col}-pp`} className="p-1 border-r text-center font-bold text-[#0369a1] text-[11px] bg-[#e0f2fe] sticky top-[130px] z-40 h-[40px]">{formatWithCommas(totalPP)}</TableHead>
+                                                        };
+                                                        return (
+                                                            <React.Fragment key={`${wm}-pp`}>
+                                                                {renderC('c1')}
+                                                                {renderC('c2')}
+                                                                {renderC('c4')}
+                                                                {renderC('c5')}
+                                                            </React.Fragment>
+                                                        );
+                                                    })}
+                                                    <TableHead className="p-1 border-r bg-[#e0f2fe] font-bold text-[#0369a1] text-center h-[40px]">
+                                                        {(() => {
+                                                            let total = 0;
+                                                            windmillNumbers.forEach(wm => {
+                                                                ['c1', 'c2', 'c4', 'c5'].forEach(slot => {
+                                                                    total += originalEbSummary && originalEbSummary[wm] ? Math.round(Number(originalEbSummary[wm][`${slot}_pp`])) || 0 : 0;
+                                                                });
+                                                            });
+                                                            return formatWithCommas(total);
+                                                        })()}
+                                                    </TableHead>
+                                                </TableRow>
+
+                                                {/* Banking Row */}
+                                                <TableRow className="bg-[#ffedd5] border-b border-white hover:bg-[#ffedd5] h-[40px]">
+                                                    <TableHead colSpan={3} className="py-2 text-sm text-[#c2410c] font-bold border-r bg-[#ffedd5] align-middle sticky top-[170px] left-0 z-50 text-center uppercase tracking-wide h-[40px]">
+                                                        Banking
+                                                    </TableHead>
+                                                    {windmillNumbers.map((wm) => {
+                                                        const renderC = (col: 'c1' | 'c2' | 'c4' | 'c5') => {
+                                                            const totalBank = originalEbSummary && originalEbSummary[wm] ? Math.round(Number(originalEbSummary[wm][`${col}_bank`])) || 0 : 0;
+                                                            return <TableHead key={`${wm}-${col}-bank`} className="p-1 border-r text-center font-bold text-[#c2410c] text-[11px] bg-[#ffedd5] sticky top-[170px] z-40 h-[40px]">{formatWithCommas(totalBank)}</TableHead>
+                                                        };
+                                                        return (
+                                                            <React.Fragment key={`${wm}-bank`}>
+                                                                {renderC('c1')}
+                                                                {renderC('c2')}
+                                                                {renderC('c4')}
+                                                                {renderC('c5')}
+                                                            </React.Fragment>
+                                                        );
+                                                    })}
+                                                    <TableHead className="p-1 border-r bg-[#ffedd5] font-bold text-[#c2410c] text-center h-[40px]">
+                                                        {(() => {
+                                                            let total = 0;
+                                                            windmillNumbers.forEach(wm => {
+                                                                ['c1', 'c2', 'c4', 'c5'].forEach(slot => {
+                                                                    total += originalEbSummary && originalEbSummary[wm] ? Math.round(Number(originalEbSummary[wm][`${slot}_bank`])) || 0 : 0;
+                                                                });
+                                                            });
+                                                            return formatWithCommas(total);
+                                                        })()}
+                                                    </TableHead>
+                                                </TableRow>
                                             </TableHeader>
                                             <TableBody>
                                                 {/* Group Logic */}
@@ -1921,49 +2101,6 @@ function EnergyAllotment() {
 
                                                     return (
                                                         <React.Fragment>
-                                                            {/* Power Plant Row */}
-                                                            <TableRow className="bg-[#e0f2fe] border-b border-white hover:bg-[#e0f2fe]">
-                                                                <TableCell colSpan={3} className="py-2 text-sm text-[#0369a1] font-bold border-r bg-[#e0f2fe] align-middle sticky left-0 z-20 text-center uppercase tracking-wide">
-                                                                    Power Plant
-                                                                </TableCell>
-                                                                {generators.map((wm) => {
-                                                                    const renderC = (col: 'c1' | 'c2' | 'c4' | 'c5') => {
-                                                                        const totalPP = ebSummaryData && ebSummaryData[wm] ? Number(ebSummaryData[wm][`${col}_pp`]) || 0 : 0;
-                                                                        return <TableCell key={`${wm}-${col}-pp`} className="p-1 border-r text-center font-bold text-[#0369a1] text-[11px] bg-[#e0f2fe]">{formatWithCommas(totalPP)}</TableCell>
-                                                                    };
-                                                                    return (
-                                                                        <React.Fragment key={`${wm}-pp`}>
-                                                                            {renderC('c1')}
-                                                                            {renderC('c2')}
-                                                                            {renderC('c4')}
-                                                                            {renderC('c5')}
-                                                                        </React.Fragment>
-                                                                    );
-                                                                })}
-                                                                <TableCell className="p-1 border-r bg-[#e0f2fe] font-bold text-[#0369a1] text-center">-</TableCell>
-                                                            </TableRow>
-
-                                                            {/* Banking Row */}
-                                                            <TableRow className="bg-[#ffedd5] border-b border-white hover:bg-[#ffedd5]">
-                                                                <TableCell colSpan={3} className="py-2 text-sm text-[#c2410c] font-bold border-r bg-[#ffedd5] align-middle sticky left-0 z-20 text-center uppercase tracking-wide">
-                                                                    Banking
-                                                                </TableCell>
-                                                                {generators.map((wm) => {
-                                                                    const renderC = (col: 'c1' | 'c2' | 'c4' | 'c5') => {
-                                                                        const totalBank = ebSummaryData && ebSummaryData[wm] ? Number(ebSummaryData[wm][`${col}_bank`]) || 0 : 0;
-                                                                        return <TableCell key={`${wm}-${col}-bank`} className="p-1 border-r text-center font-bold text-[#c2410c] text-[11px] bg-[#ffedd5]">{formatWithCommas(totalBank)}</TableCell>
-                                                                    };
-                                                                    return (
-                                                                        <React.Fragment key={`${wm}-bank`}>
-                                                                            {renderC('c1')}
-                                                                            {renderC('c2')}
-                                                                            {renderC('c4')}
-                                                                            {renderC('c5')}
-                                                                        </React.Fragment>
-                                                                    );
-                                                                })}
-                                                                <TableCell className="p-1 border-r bg-[#ffedd5] font-bold text-[#c2410c] text-center">-</TableCell>
-                                                            </TableRow>
 
 
                                                             {Object.entries(groupedData).sort().map(([customer, seSet]) => {
@@ -1979,7 +2116,7 @@ function EnergyAllotment() {
                                                                     const getBalance = (orig: any, totalAlloc: number) => {
                                                                         const o = parseFloat(orig) || 0;
                                                                         const res = Math.max(o - totalAlloc, 0);
-                                                                        return formatWithCommas(res.toFixed(2).replace(/\.00$/, ""));
+                                                                        return formatWithCommas(Math.round(res));
                                                                     };
 
                                                                     const totalAllocC1 = rowItems.reduce((acc, d) => acc + (parseFloat(stripCommas(d.c1)) || 0), 0);
@@ -2049,7 +2186,9 @@ function EnergyAllotment() {
                                                                                         </React.Fragment>
                                                                                     );
                                                                                 })}
-                                                                                <TableCell className="p-1 border-r text-center align-middle bg-slate-50 font-bold text-slate-700 text-xs py-2">-</TableCell>
+                                                                                <TableCell className="p-1 border-r text-center align-middle bg-slate-50 font-bold text-slate-700 text-xs py-2">
+                                                                                    {totalConsumptionReq?.total || '0'}
+                                                                                </TableCell>
                                                                             </TableRow>
 
                                                                             {/* Row 2: Allocated */}
@@ -2061,10 +2200,42 @@ function EnergyAllotment() {
                                                                                     const item = filteredData.find(d => String(d.customer || '').trim() === customer && String(d.seNumber || '').trim() === String(seNumber || '').trim() && String(d.wm || '').trim() === String(wm || '').trim());
                                                                                     return (
                                                                                         <React.Fragment key={wm}>
-                                                                                            <TableCell className="p-1 border-r text-center"><Input className="h-7 text-center text-xs px-0" maxLength={12} value={item ? item.c1 : ''} onChange={(e) => handleGridUpdate(customer, seNumber, wm, 'c1', e.target.value)} /></TableCell>
-                                                                                            <TableCell className="p-1 border-r text-center"><Input className="h-7 text-center text-xs px-0" maxLength={12} value={item ? item.c2 : ''} onChange={(e) => handleGridUpdate(customer, seNumber, wm, 'c2', e.target.value)} /></TableCell>
-                                                                                            <TableCell className="p-1 border-r text-center"><Input className="h-7 text-center text-xs px-0" maxLength={12} value={item ? item.c4 : ''} onChange={(e) => handleGridUpdate(customer, seNumber, wm, 'c4', e.target.value)} /></TableCell>
-                                                                                            <TableCell className="p-1 border-r text-center"><Input className="h-7 text-center text-xs px-0" maxLength={12} value={item ? item.c5 : ''} onChange={(e) => handleGridUpdate(customer, seNumber, wm, 'c5', e.target.value)} /></TableCell>
+                                                                                            <TableCell className="p-1 border-r text-center">
+                                                                                                <Input
+                                                                                                    className="h-7 text-center text-xs px-0"
+                                                                                                    maxLength={12}
+                                                                                                    value={item ? item.c1 : ''}
+                                                                                                    onChange={(e) => handleGridUpdate(customer, seNumber, wm, 'c1', e.target.value)}
+                                                                                                    onBlur={(e) => handleGridBlur(customer, seNumber, wm, 'c1', e.target.value)}
+                                                                                                />
+                                                                                            </TableCell>
+                                                                                            <TableCell className="p-1 border-r text-center">
+                                                                                                <Input
+                                                                                                    className="h-7 text-center text-xs px-0"
+                                                                                                    maxLength={12}
+                                                                                                    value={item ? item.c2 : ''}
+                                                                                                    onChange={(e) => handleGridUpdate(customer, seNumber, wm, 'c2', e.target.value)}
+                                                                                                    onBlur={(e) => handleGridBlur(customer, seNumber, wm, 'c2', e.target.value)}
+                                                                                                />
+                                                                                            </TableCell>
+                                                                                            <TableCell className="p-1 border-r text-center">
+                                                                                                <Input
+                                                                                                    className="h-7 text-center text-xs px-0"
+                                                                                                    maxLength={12}
+                                                                                                    value={item ? item.c4 : ''}
+                                                                                                    onChange={(e) => handleGridUpdate(customer, seNumber, wm, 'c4', e.target.value)}
+                                                                                                    onBlur={(e) => handleGridBlur(customer, seNumber, wm, 'c4', e.target.value)}
+                                                                                                />
+                                                                                            </TableCell>
+                                                                                            <TableCell className="p-1 border-r text-center">
+                                                                                                <Input
+                                                                                                    className="h-7 text-center text-xs px-0"
+                                                                                                    maxLength={12}
+                                                                                                    value={item ? item.c5 : ''}
+                                                                                                    onChange={(e) => handleGridUpdate(customer, seNumber, wm, 'c5', e.target.value)}
+                                                                                                    onBlur={(e) => handleGridBlur(customer, seNumber, wm, 'c5', e.target.value)}
+                                                                                                />
+                                                                                            </TableCell>
                                                                                         </React.Fragment>
                                                                                     );
                                                                                 })}
@@ -2092,7 +2263,12 @@ function EnergyAllotment() {
                                                                                         </TableCell>
                                                                                     </React.Fragment>
                                                                                 ))}
-                                                                                <TableCell className="p-1 border-r text-center align-middle bg-green-50 font-bold text-green-700 text-xs py-2">-</TableCell>
+                                                                                <TableCell className="p-1 border-r text-center align-middle bg-green-50 font-bold text-green-700 text-xs py-2">
+                                                                                    {(() => {
+                                                                                        const sum = (parseFloat(stripCommas(balC1)) || 0) + (parseFloat(stripCommas(balC2)) || 0) + (parseFloat(stripCommas(balC4)) || 0) + (parseFloat(stripCommas(balC5)) || 0);
+                                                                                        return formatWithCommas(Math.round(sum));
+                                                                                    })()}
+                                                                                </TableCell>
                                                                             </TableRow>
 
                                                                             {/* Row 4: Utilized Power */}
@@ -2103,7 +2279,7 @@ function EnergyAllotment() {
                                                                                 {generators.map(wm => {
                                                                                     const item = filteredData.find(d => String(d.customer || '').trim() === customer && d.seNumber === seNumber && d.wm === wm);
                                                                                     const getUP = (col: string) => {
-                                                                                        if (!item) return '-';
+                                                                                        if (!item) return 0;
                                                                                         const alloc = Number(String(item[col] || '0').replace(/,/g, ''));
                                                                                         if (alloc === 0) return 0;
 
@@ -2114,13 +2290,12 @@ function EnergyAllotment() {
                                                                                         };
                                                                                         const prev = (c: string) => cumulativeMap[wm]?.[c]?.[currentIndex] || 0;
 
+                                                                                        let result = 0;
                                                                                         if (col === 'c1' || col === 'c2') {
                                                                                             const sharedPP = p.c1 + p.c2;
                                                                                             const prevUsed = prev('c1') + prev('c2');
-                                                                                            return Math.min(alloc, Math.max(sharedPP - prevUsed, 0));
-                                                                                        }
-                                                                                        if (col === 'c4') {
-                                                                                            // C4 used by C4 and overflow of C5
+                                                                                            result = Math.min(alloc, Math.max(sharedPP - prevUsed, 0));
+                                                                                        } else if (col === 'c4') {
                                                                                             const prevC4 = prev('c4');
                                                                                             const c5_borrowed_before = filteredData
                                                                                                 .filter((d, idx) => d.wm === wm && idx < currentIndex)
@@ -2128,9 +2303,8 @@ function EnergyAllotment() {
                                                                                                     const a5 = Number(String(d.c5).replace(/,/g, '')) || 0;
                                                                                                     return sum + Math.max(a5 - p.c5, 0);
                                                                                                 }, 0);
-                                                                                            return Math.min(alloc, Math.max(p.c4 - prevC4 - c5_borrowed_before, 0));
-                                                                                        }
-                                                                                        if (col === 'c5') {
+                                                                                            result = Math.min(alloc, Math.max(p.c4 - prevC4 - c5_borrowed_before, 0));
+                                                                                        } else if (col === 'c5') {
                                                                                             const ownAvail = Math.max(p.c5 - prev('c5'), 0);
                                                                                             const fromOwn = Math.min(alloc, ownAvail);
                                                                                             const rem = alloc - fromOwn;
@@ -2141,9 +2315,11 @@ function EnergyAllotment() {
                                                                                                     return sum + Math.max(a5 - p.c5, 0);
                                                                                                 }, 0);
                                                                                             const fromC4 = Math.min(rem, Math.max(p.c4 - prevC4Used, 0));
-                                                                                            return fromOwn + fromC4;
+                                                                                            result = fromOwn + fromC4;
+                                                                                        } else {
+                                                                                            result = Math.min(alloc, Math.max((p[col as keyof typeof p] || 0) - prev(col), 0));
                                                                                         }
-                                                                                        return Math.min(alloc, Math.max((p[col as keyof typeof p] || 0) - prev(col), 0));
+                                                                                        return Math.round(result);
                                                                                     };
                                                                                     return (
                                                                                         <React.Fragment key={wm}>
@@ -2154,7 +2330,36 @@ function EnergyAllotment() {
                                                                                         </React.Fragment>
                                                                                     );
                                                                                 })}
-                                                                                <TableCell className="p-1 border-r text-center align-middle bg-slate-50 font-bold text-slate-700 text-xs py-2">-</TableCell>
+                                                                                <TableCell className="p-1 border-r text-center align-middle bg-slate-50 font-bold text-slate-700 text-xs py-2">
+                                                                                    {(() => {
+                                                                                        let total = 0;
+                                                                                        generators.forEach(wm => {
+                                                                                            const item = filteredData.find(d => String(d.customer || '').trim() === customer && d.seNumber === seNumber && d.wm === wm);
+                                                                                            if (item) {
+                                                                                                ['c1', 'c2', 'c4', 'c5'].forEach(col => {
+                                                                                                    // Use the same rounding as getUP
+                                                                                                    const alloc = Number(String(item[col] || '0').replace(/,/g, ''));
+                                                                                                    if (alloc > 0) {
+                                                                                                        const s = ebSummaryData[wm] || {};
+                                                                                                        const p = { c1: Number(s.c1_pp) || 0, c2: Number(s.c2_pp) || 0, c4: Number(s.c4_pp) || 0, c5: Number(s.c5_pp) || 0 };
+                                                                                                        const prev = (c: string) => cumulativeMap[wm]?.[c]?.[currentIndex] || 0;
+                                                                                                        let val = 0;
+                                                                                                        if (col === 'c1' || col === 'c2') val = Math.min(alloc, Math.max((p.c1 + p.c2) - (prev('c1') + prev('c2')), 0));
+                                                                                                        else if (col === 'c4') val = Math.min(alloc, Math.max(p.c4 - prev('c4') - filteredData.filter((d, idx) => d.wm === wm && idx < currentIndex).reduce((sum, d) => sum + Math.max((Number(String(d.c5).replace(/,/g, '')) || 0) - p.c5, 0), 0), 0));
+                                                                                                        else if (col === 'c5') {
+                                                                                                            const ownAvail = Math.max(p.c5 - prev('c5'), 0);
+                                                                                                            const fromOwn = Math.min(alloc, ownAvail);
+                                                                                                            const fromC4 = Math.min(alloc - fromOwn, Math.max(p.c4 - (prev('c4') + filteredData.filter((d, idx) => d.wm === wm && idx < currentIndex).reduce((sum, d) => sum + Math.max((Number(String(d.c5).replace(/,/g, '')) || 0) - p.c5, 0), 0)), 0));
+                                                                                                            val = fromOwn + fromC4;
+                                                                                                        } else val = Math.min(alloc, Math.max((p[col as keyof typeof p] || 0) - prev(col), 0));
+                                                                                                        total += Math.round(val);
+                                                                                                    }
+                                                                                                });
+                                                                                            }
+                                                                                        });
+                                                                                        return formatWithCommas(total);
+                                                                                    })()}
+                                                                                </TableCell>
                                                                             </TableRow>
 
                                                                             {/* Row 4: Utilized Bank */}
@@ -2188,7 +2393,7 @@ function EnergyAllotment() {
                                                                                         };
 
                                                                                         if (col === 'c1' || col === 'c2') {
-                                                                                            return calcUB(alloc, p.c1p + p.c2p, p.c1b + p.c2b, prev('c1') + prev('c2'));
+                                                                                            return Math.round(calcUB(alloc, p.c1p + p.c2p, p.c1b + p.c2b, prev('c1') + prev('c2')));
                                                                                         }
 
                                                                                         if (col === 'c4') {
@@ -2200,7 +2405,7 @@ function EnergyAllotment() {
                                                                                                     const a5 = Number(String(d.c5).replace(/,/g, '')) || 0;
                                                                                                     return sum + Math.max(a5 - p.c5p - p.c5b, 0);
                                                                                                 }, 0);
-                                                                                            return calcUB(alloc, p.c4p, p.c4b, prevC4 + c5_borrowed_before);
+                                                                                            return Math.round(calcUB(alloc, p.c4p, p.c4b, prevC4 + c5_borrowed_before));
                                                                                         }
 
                                                                                         if (col === 'c5') {
@@ -2213,7 +2418,7 @@ function EnergyAllotment() {
                                                                                             const utBN_own = Math.min(r, avBN_own);
                                                                                             r -= utBN_own;
 
-                                                                                            if (r <= 0) return utBN_own;
+                                                                                            if (r <= 0) return Math.round(utBN_own);
 
                                                                                             // Borrow from C4
                                                                                             const prevC4Used = prev('c4') + filteredData
@@ -2231,10 +2436,12 @@ function EnergyAllotment() {
                                                                                             const avBN_c4 = Math.max(p.c4b - bnUsedBefore_c4, 0);
                                                                                             const utBN_c4 = Math.min(r, avBN_c4);
 
-                                                                                            return utBN_own + utBN_c4;
+                                                                                            return Math.round(utBN_own + utBN_c4);
                                                                                         }
 
-                                                                                        return calcUB(alloc, p[`${col}p` as keyof typeof p] || 0, p[`${col}b` as keyof typeof p] || 0, prev(col));
+                                                                                        const ppPool = Number(s[`${col}_pp`]) || 0;
+                                                                                        const bnPool = Number(s[`${col}_bank`]) || 0;
+                                                                                        return Math.round(calcUB(alloc, ppPool, bnPool, prev(col)));
                                                                                     };
                                                                                     return (
                                                                                         <React.Fragment key={wm}>
@@ -2245,7 +2452,44 @@ function EnergyAllotment() {
                                                                                         </React.Fragment>
                                                                                     );
                                                                                 })}
-                                                                                <TableCell className="p-1 border-r text-center align-middle bg-slate-50 font-bold text-slate-700 text-xs py-2">-</TableCell>
+                                                                                <TableCell className="p-1 border-r text-center align-middle bg-slate-50 font-bold text-slate-700 text-xs py-2">
+                                                                                    {(() => {
+                                                                                        let total = 0;
+                                                                                        generators.forEach(wm => {
+                                                                                            ['c1', 'c2', 'c4', 'c5'].forEach(col => {
+                                                                                                const item = filteredData.find(d => String(d.customer || '').trim() === customer && d.seNumber === seNumber && d.wm === wm);
+                                                                                                if (item) {
+                                                                                                    const alloc = Number(String(item[col] || '0').replace(/,/g, ''));
+                                                                                                    if (alloc > 0) {
+                                                                                                        const s = ebSummaryData[wm] || {};
+                                                                                                        const p = { c1p: Number(s.c1_pp) || 0, c1b: Number(s.c1_bank) || 0, c2p: Number(s.c2_pp) || 0, c2b: Number(s.c2_bank) || 0, c4p: Number(s.c4_pp) || 0, c4b: Number(s.c4_bank) || 0, c5p: Number(s.c5_pp) || 0, c5b: Number(s.c5_bank) || 0 };
+                                                                                                        const prev = (c: string) => cumulativeMap[wm]?.[c]?.[currentIndex] || 0;
+                                                                                                        const calcUB = (amt: number, ppPool: number, bnPool: number, prUsage: number) => {
+                                                                                                            const utPP = Math.min(amt, Math.max(ppPool - prUsage, 0));
+                                                                                                            const bnUsedBefore = Math.max(prUsage - ppPool, 0);
+                                                                                                            return Math.min(amt - utPP, Math.max(bnPool - bnUsedBefore, 0));
+                                                                                                        };
+                                                                                                        let val = 0;
+                                                                                                        if (col === 'c1' || col === 'c2') val = calcUB(alloc, p.c1p + p.c2p, p.c1b + p.c2b, prev('c1') + prev('c2'));
+                                                                                                        else if (col === 'c4') val = calcUB(alloc, p.c4p, p.c4b, prev('c4') + filteredData.filter((d, idx) => d.wm === wm && idx < currentIndex).reduce((sum, d) => sum + Math.max((Number(String(d.c5).replace(/,/g, '')) || 0) - p.c5p - p.c5b, 0), 0));
+                                                                                                        else if (col === 'c5') {
+                                                                                                            const utPP_own = Math.min(alloc, Math.max(p.c5p - prev('c5'), 0));
+                                                                                                            const utBN_own = Math.min(alloc - utPP_own, Math.max(p.c5b - Math.max(prev('c5') - p.c5p, 0), 0));
+                                                                                                            let r = alloc - utPP_own - utBN_own;
+                                                                                                            if (r > 0) {
+                                                                                                                const prevC4Used = prev('c4') + filteredData.filter((d, idx) => d.wm === wm && idx < currentIndex).reduce((sum, d) => sum + Math.max((Number(String(d.c5).replace(/,/g, '')) || 0) - p.c5p - p.c5b, 0), 0);
+                                                                                                                const utPP_c4 = Math.min(r, Math.max(p.c4p - prevC4Used, 0));
+                                                                                                                val = utBN_own + Math.min(r - utPP_c4, Math.max(p.c4b - Math.max(prevC4Used - p.c4p, 0), 0));
+                                                                                                            } else val = utBN_own;
+                                                                                                        } else val = calcUB(alloc, Number(s[`${col}_pp`]) || 0, Number(s[`${col}_bank`]) || 0, prev(col));
+                                                                                                        total += Math.round(val);
+                                                                                                    }
+                                                                                                }
+                                                                                            });
+                                                                                        });
+                                                                                        return formatWithCommas(total);
+                                                                                    })()}
+                                                                                </TableCell>
                                                                             </TableRow>
                                                                         </React.Fragment>
                                                                     );
@@ -2322,6 +2566,7 @@ function EnergyAllotment() {
                                                         <TableHead className="py-2 h-10 font-semibold text-white text-right whitespace-nowrap text-xs px-3">{chargeLabels.shc}</TableHead>
                                                         <TableHead className="py-2 h-10 font-semibold text-white text-right whitespace-nowrap text-xs px-3">{chargeLabels.other}</TableHead>
                                                         <TableHead className="py-2 h-10 font-semibold text-white text-right whitespace-nowrap text-xs px-3">{chargeLabels.dc}</TableHead>
+                                                        <TableHead className="py-2 h-10 font-semibold text-white text-right whitespace-nowrap text-xs px-3 bg-sidebar/90 border-l border-white/10">Total</TableHead>
                                                     </TableRow>
                                                 </TableHeader>
                                                 <TableBody>
@@ -2381,10 +2626,37 @@ function EnergyAllotment() {
                                                                 <TableCell className="p-1.5 border-r"><Input readOnly={!isEditing} className="h-8 text-right text-[11px] border-slate-200 shadow-none focus-visible:ring-1 bg-white text-black font-normal rounded-sm px-2" value={formatWithCommas(row.shc)} onChange={(e) => handleChargeFieldChange(index, 'shc', e.target.value)} /></TableCell>
                                                                 <TableCell className="p-1.5 border-r"><Input readOnly={!isEditing} className="h-8 text-right text-[11px] border-slate-200 shadow-none focus-visible:ring-1 bg-white text-black font-normal rounded-sm px-2" value={formatWithCommas(row.other)} onChange={(e) => handleChargeFieldChange(index, 'other', e.target.value)} /></TableCell>
                                                                 <TableCell className="p-1.5 border-r"><Input readOnly={!isEditing} className="h-8 text-right text-[11px] border-slate-200 shadow-none focus-visible:ring-1 bg-white text-black font-normal rounded-sm px-2" value={formatWithCommas(row.dc)} onChange={(e) => handleChargeFieldChange(index, 'dc', e.target.value)} /></TableCell>
+                                                                <TableCell className="p-1.5 border-r bg-slate-50 font-bold text-right text-[11px] pr-3 text-indigo-700">
+                                                                    {formatWithCommas(
+                                                                        (Number(row.mrc) || 0) + (Number(row.trc) || 0) + (Number(row.oc1) || 0) +
+                                                                        (Number(row.kp) || 0) + (Number(row.ec) || 0) + (Number(row.shc) || 0) +
+                                                                        (Number(row.other) || 0) + (Number(row.dc) || 0)
+                                                                    )}
+                                                                </TableCell>
                                                             </TableRow>
                                                         ))
                                                     )}
                                                 </TableBody>
+                                                <TableFooter className="bg-slate-100/80 border-t-2 border-slate-200">
+                                                    <TableRow className="h-10 hover:bg-slate-100/80">
+                                                        <TableCell colSpan={3} className="text-xs font-bold text-slate-700 pl-3">Grand Total</TableCell>
+                                                        <TableCell className="text-right text-[11px] font-bold pr-3 text-slate-900 border-r border-slate-200">{formatWithCommas(chargeAllocationRows.reduce((sum, r) => sum + (Number(r.mrc) || 0), 0))}</TableCell>
+                                                        <TableCell className="text-right text-[11px] font-bold pr-3 text-slate-900 border-r border-slate-200">{formatWithCommas(chargeAllocationRows.reduce((sum, r) => sum + (Number(r.trc) || 0), 0))}</TableCell>
+                                                        <TableCell className="text-right text-[11px] font-bold pr-3 text-slate-900 border-r border-slate-200">{formatWithCommas(chargeAllocationRows.reduce((sum, r) => sum + (Number(r.oc1) || 0), 0))}</TableCell>
+                                                        <TableCell className="text-right text-[11px] font-bold pr-3 text-slate-900 border-r border-slate-200">{formatWithCommas(chargeAllocationRows.reduce((sum, r) => sum + (Number(r.kp) || 0), 0))}</TableCell>
+                                                        <TableCell className="text-right text-[11px] font-bold pr-3 text-slate-900 border-r border-slate-200">{formatWithCommas(chargeAllocationRows.reduce((sum, r) => sum + (Number(r.ec) || 0), 0))}</TableCell>
+                                                        <TableCell className="text-right text-[11px] font-bold pr-3 text-slate-900 border-r border-slate-200">{formatWithCommas(chargeAllocationRows.reduce((sum, r) => sum + (Number(r.shc) || 0), 0))}</TableCell>
+                                                        <TableCell className="text-right text-[11px] font-bold pr-3 text-slate-900 border-r border-slate-200">{formatWithCommas(chargeAllocationRows.reduce((sum, r) => sum + (Number(r.other) || 0), 0))}</TableCell>
+                                                        <TableCell className="text-right text-[11px] font-bold pr-3 text-slate-900 border-r border-slate-200">{formatWithCommas(chargeAllocationRows.reduce((sum, r) => sum + (Number(r.dc) || 0), 0))}</TableCell>
+                                                        <TableCell className="text-right text-[11px] font-bold pr-3 bg-indigo-50 text-indigo-700">
+                                                            {formatWithCommas(chargeAllocationRows.reduce((sum, r) => sum +
+                                                                (Number(r.mrc) || 0) + (Number(r.trc) || 0) + (Number(r.oc1) || 0) +
+                                                                (Number(r.kp) || 0) + (Number(r.ec) || 0) + (Number(r.shc) || 0) +
+                                                                (Number(r.other) || 0) + (Number(r.dc) || 0)
+                                                                , 0))}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                </TableFooter>
                                             </Table>
                                         </div>
 
@@ -2494,9 +2766,9 @@ function EnergyAllotment() {
                                                                                     .filter(se => {
                                                                                         // Only show SE numbers not already used for THIS specific charge code
                                                                                         if (se === row.seNumber) return true;
-                                                                                        const isUsed = solarAllocationRows.some(r => 
-                                                                                            r.chargeCode === row.chargeCode && 
-                                                                                            r.customer === row.customer && 
+                                                                                        const isUsed = solarAllocationRows.some(r =>
+                                                                                            r.chargeCode === row.chargeCode &&
+                                                                                            r.customer === row.customer &&
                                                                                             r.seNumber === se
                                                                                         );
                                                                                         return !isUsed;

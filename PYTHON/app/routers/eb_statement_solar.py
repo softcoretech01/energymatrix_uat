@@ -179,7 +179,8 @@ async def upload_eb_statement_solar(
         "message": "EB Statement (solar) uploaded and header created", 
         "filename": unique_name,
         "header_id": header_id,
-        "parsed": parsed_data
+        "parsed": parsed_data,
+        "parsed_data": parsed_data
     }
 
 
@@ -653,6 +654,7 @@ async def read_eb_statement_solar_pdf(
         "message": "EB Statement (solar) uploaded and read",
         "filename": unique_name,
         "parsed": parsed_data,
+        "parsed_data": parsed_data,
         "header_id": header_id,
         "warning": warning_msg,
     }
@@ -856,12 +858,18 @@ async def save_eb_statement_solar_details(
         for slot_key, net_val_str in payload.slots.items():
             slot_id = int(slot_key.replace("C", "")) if slot_key.startswith("C") and slot_key[1:].isdigit() else None
             net_val = float(net_val_str or 0)
+            
+            # Map corresponding banking slot value if present
+            banking_val_str = "0"
+            if payload.banking_slots and slot_key in payload.banking_slots:
+                banking_val_str = payload.banking_slots[slot_key]
+            banking_val = float(banking_val_str or 0)
 
             cursor.execute(
                 """
                 INSERT INTO solar.eb_statement_solar_details
-                (eb_header_id, company_name, solar_id, slots, net_unit, created_by)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                (eb_header_id, company_name, solar_id, slots, net_unit, banking_units, created_by)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     eb_header_id,
@@ -869,6 +877,7 @@ async def save_eb_statement_solar_details(
                     payload.solar_id,
                     slot_id,
                     net_val,
+                    banking_val,
                     user_id,
                 ),
             )

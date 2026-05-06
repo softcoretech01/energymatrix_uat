@@ -156,10 +156,7 @@ export default function ConsumptionRequest() {
         }
 
         const numValue = parseFloat(value.replace(/,/g, ''));
-        const increasedValue = numValue * 1.08;
-
-        // Format with commas (Indian format)
-        const formattedValue = increasedValue.toLocaleString("en-IN", {
+        const formattedValue = numValue.toLocaleString("en-IN", {
             maximumFractionDigits: 2,
             minimumFractionDigits: 0
         }).replace(/\.00$/, '');
@@ -378,7 +375,6 @@ export default function ConsumptionRequest() {
                         <div className="flex justify-between items-center bg-primary/5 p-2 rounded-t-lg border-b border-primary/10 h-10">
                             <div className="flex items-center gap-3 pl-2">
                                 <h2 className="text-sm font-semibold text-primary">Consumption Requests List</h2>
-                                <span className="text-[11px] font-semibold text-[#CB4154] bg-red-50 px-2 py-0.5 rounded border border-red-100">* Note: Entered values will automatically add an 8% increase (Value + 8%) on blur. e.g. 250 becomes 270.</span>
                             </div>
 
                             <div className="flex items-center gap-2">

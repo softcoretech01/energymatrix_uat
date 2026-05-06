@@ -13,6 +13,7 @@ import {
     SidebarMenuSubButton,
     SidebarMenuSubItem,
     SidebarTrigger,
+    useSidebar,
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import {
@@ -44,6 +45,7 @@ import {
 export function AppSidebar() {
     const location = useLocation();
     const navigate = useNavigate();
+    const { setOpen } = useSidebar();
 
     const handleLogout = async () => {
         // Call logout endpoint (best effort - don't wait for response)
@@ -305,7 +307,15 @@ export function AppSidebar() {
                                                                     : "text-sidebar-foreground/80 hover:bg-white/10 hover:text-white"
                                                             )}
                                                         >
-                                                            <Link to={subItem.url} className="flex items-center gap-3">
+                                                            <Link
+                                                                to={subItem.url}
+                                                                className="flex items-center gap-3"
+                                                                onClick={() => {
+                                                                    if (subItem.title === "Energy Allotment") {
+                                                                        setOpen(false);
+                                                                    }
+                                                                }}
+                                                            >
                                                                 <subItem.icon className={cn(
                                                                     "w-4 h-4 transition-colors",
                                                                     isActive ? "text-white" : "text-sidebar-foreground/60"
@@ -342,7 +352,7 @@ export function AppSidebar() {
                         </SidebarMenuItem>
                     </SidebarMenu>
                     <div className="px-4 py-2 text-xs text-sidebar-foreground/70 text-center group-data-[collapsible=icon]:hidden">
-                        version 1.1.10
+                        version 1.1.11
                     </div>
                 </SidebarGroup>
             </SidebarContent>

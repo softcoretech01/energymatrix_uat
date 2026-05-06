@@ -845,8 +845,8 @@ async def get_eb_statement_summary_by_month(
             SELECT 
                 TRIM(mw.windmill_number) as windmill_number,
                 d.slots AS slot,
-                0 AS pp_units,
-                d.net_unit AS bank_units,
+                d.net_unit AS pp_units,
+                d.banking_units AS bank_units,
                 es.year,
                 es.month,
                 mw.id as windmill_id
