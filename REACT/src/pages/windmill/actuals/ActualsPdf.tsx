@@ -57,7 +57,7 @@ export default function ActualsPdf() {
             <div className="bg-white mx-auto p-8 shadow-lg max-w-[210mm] min-h-[297mm]">
 
                 <h3 className="text-center font-bold mb-4">
-                    Energy Allotment Order Charges
+                    Actual Allotment Units
                 </h3>
 
                 {/* Header */}

@@ -1675,11 +1675,13 @@ CREATE DEFINER=`root`@`%` PROCEDURE `sp_get_actual_tax_total`(
     IN p_month INT
 )
 BEGIN
-    SELECT (
-        (SELECT IFNULL(SUM(self_gen_tax), 0) FROM windmill.actual WHERE customer_id = p_customer_id AND sc_id = p_sc_id AND actual_year = p_year AND actual_month = p_month) +
-        (SELECT IFNULL(SUM(cad.charge_amount), 0) FROM windmill.charge_allotment_header cah JOIN windmill.charge_allotment_details cad ON cah.id = cad.header_id JOIN masters.master_consumption_chargers mcc ON cad.charge_id = mcc.id WHERE cah.customer_id = p_customer_id AND cah.service_id = p_sc_id AND cah.year = p_year AND cah.month = p_month AND mcc.charge_code = 'C011') +
-        (SELECT IFNULL(SUM(scad.allocation), 0) FROM windmill.solar_charge_allotment_header scah JOIN windmill.solar_charge_allotment_details scad ON scah.id = scad.header_id JOIN masters.master_consumption_chargers mcc ON scad.charge_id = mcc.id WHERE scah.customer_id = p_customer_id AND scah.service_id = p_sc_id AND scah.year = p_year AND scah.month = p_month AND mcc.charge_code = 'C011')
-    ) as total_tax;
+    DECLARE v_cust_name VARCHAR(255);
+    SELECT customer_name INTO v_cust_name FROM masters.master_customers WHERE id = p_customer_id;
+
+    SELECT IF(v_cust_name LIKE '%L&T%', 0, (
+        (SELECT IFNULL(SUM(calculated_wheeling_value), 0) FROM windmill.actual WHERE customer_id = p_customer_id AND sc_id = p_sc_id AND actual_year = p_year AND actual_month = p_month) *
+        (SELECT IFNULL(cost, 0) FROM masters.master_consumption_chargers WHERE charge_code = 'C011' LIMIT 1)
+    )) as total_tax;
 END ;;
 DELIMITER ;
 /*!50003 SET sql_mode              = @saved_sql_mode */ ;
@@ -2019,10 +2021,14 @@ BEGIN
     DECLARE v_month_name VARCHAR(20);
     DECLARE v_month_int INT;
 
+    DECLARE v_cust_name VARCHAR(255);
+
     -- Get invoice basics
-    SELECT customer_id, service_id, year, month 
-    INTO v_cust_id, v_service_id, v_year, v_month_name
-    FROM windmill.client_invoice WHERE id = p_id;
+    SELECT ci.customer_id, ci.service_id, ci.year, ci.month, mc.customer_name
+    INTO v_cust_id, v_service_id, v_year, v_month_name, v_cust_name
+    FROM windmill.client_invoice ci
+    JOIN masters.master_customers mc ON ci.customer_id = mc.id
+    WHERE ci.id = p_id;
 
     -- Convert month name to int
     SET v_month_int = CASE v_month_name
@@ -2039,12 +2045,11 @@ BEGIN
         v_year as year,
         (SELECT IFNULL(rate_per_unit, 0) FROM masters.master_customers WHERE id = v_cust_id) as invoice_constant,
         
-        -- Sum Generated Units
-        (SELECT IFNULL(SUM(ead.allocated), 0)
-         FROM windmill.energy_allotment_header eah
-         JOIN windmill.energy_allotment_details ead ON eah.allocation_id = ead.allocation_id
-         WHERE eah.customer_id = v_cust_id AND eah.service_id = v_service_id
-           AND eah.year = v_year AND eah.month = v_month_int) as generated_units,
+        -- Sum Generated Units (from actual wheeling)
+        (SELECT IFNULL(SUM(calculated_wheeling_value), 0)
+         FROM windmill.actual
+         WHERE customer_id = v_cust_id AND sc_id = v_service_id
+           AND actual_year = v_year AND actual_month = v_month_int) as generated_units,
         -- Meter (C001)
         (SELECT IFNULL(SUM(cad.charge_amount), 0) FROM windmill.charge_allotment_header cah JOIN windmill.charge_allotment_details cad ON cah.id = cad.header_id JOIN masters.master_consumption_chargers mcc ON cad.charge_id = mcc.id WHERE cah.customer_id = v_cust_id AND cah.service_id = v_service_id AND cah.year = v_year AND cah.month = v_month_int AND mcc.charge_code = 'C001') as charge_meter_windmill,
         (SELECT IFNULL(SUM(scad.allocation), 0) FROM windmill.solar_charge_allotment_header scah JOIN windmill.solar_charge_allotment_details scad ON scah.id = scad.header_id JOIN masters.master_consumption_chargers mcc ON scad.charge_id = mcc.id WHERE scah.customer_id = v_cust_id AND scah.service_id = v_service_id AND scah.year = v_year AND scah.month = v_month_int AND mcc.charge_code = 'C001') as charge_meter_solar,
@@ -2078,10 +2083,11 @@ BEGIN
         (SELECT IFNULL(SUM(scad.allocation), 0) FROM windmill.solar_charge_allotment_header scah JOIN windmill.solar_charge_allotment_details scad ON scah.id = scad.header_id JOIN masters.master_consumption_chargers mcc ON scad.charge_id = mcc.id WHERE scah.customer_id = v_cust_id AND scah.service_id = v_service_id AND scah.year = v_year AND scah.month = v_month_int AND mcc.charge_code = 'C010') as charge_dsm_solar,
 
         -- Wheeling (C009)
-        (
-            (SELECT IFNULL(SUM(cad.charge_amount), 0) FROM windmill.charge_allotment_header cah JOIN windmill.charge_allotment_details cad ON cah.id = cad.header_id JOIN masters.master_consumption_chargers mcc ON cad.charge_id = mcc.id WHERE cah.customer_id = v_cust_id AND cah.service_id = v_service_id AND cah.year = v_year AND cah.month = v_month_int AND mcc.charge_code = 'C009') +
-            (SELECT IFNULL(SUM(calculated_wheeling_value), 0) FROM windmill.actual WHERE customer_id = v_cust_id AND sc_id = v_service_id AND actual_year = v_year AND actual_month = v_month_int)
-        ) as charge_wheeling_windmill,
+        (SELECT IFNULL(SUM(ebac.wheeling_charges), 0)
+         FROM windmill.eb_bill eb
+         JOIN windmill.eb_bill_adjustment_charges ebac ON eb.id = ebac.eb_bill_header_id
+         WHERE eb.customer_id = v_cust_id AND eb.sc_id = v_service_id
+           AND eb.bill_year = v_year AND eb.bill_month = v_month_int) as charge_wheeling_windmill,
         (SELECT IFNULL(SUM(scad.allocation), 0) FROM windmill.solar_charge_allotment_header scah JOIN windmill.solar_charge_allotment_details scad ON scah.id = scad.header_id JOIN masters.master_consumption_chargers mcc ON scad.charge_id = mcc.id WHERE scah.customer_id = v_cust_id AND scah.service_id = v_service_id AND scah.year = v_year AND scah.month = v_month_int AND mcc.charge_code = 'C009') as charge_wheeling_solar,
 
         -- Other Charges (C008)
@@ -2089,11 +2095,13 @@ BEGIN
         (SELECT IFNULL(SUM(scad.allocation), 0) FROM windmill.solar_charge_allotment_header scah JOIN windmill.solar_charge_allotment_details scad ON scah.id = scad.header_id JOIN masters.master_consumption_chargers mcc ON scad.charge_id = mcc.id WHERE scah.customer_id = v_cust_id AND scah.service_id = v_service_id AND scah.year = v_year AND scah.month = v_month_int AND mcc.charge_code = 'C008') as charge_other_solar,
 
         -- Self Generation Tax (C011)
-        (
-            (SELECT IFNULL(SUM(cad.charge_amount), 0) FROM windmill.charge_allotment_header cah JOIN windmill.charge_allotment_details cad ON cah.id = cad.header_id JOIN masters.master_consumption_chargers mcc ON cad.charge_id = mcc.id WHERE cah.customer_id = v_cust_id AND cah.service_id = v_service_id AND cah.year = v_year AND cah.month = v_month_int AND mcc.charge_code = 'C011') +
-            (SELECT IFNULL(SUM(self_gen_tax), 0) FROM windmill.actual WHERE customer_id = v_cust_id AND sc_id = v_service_id AND actual_year = v_year AND actual_month = v_month_int)
+        IF(v_cust_name LIKE '%L&T%', 0, 
+            (SELECT IFNULL(SUM(calculated_wheeling_value), 0) FROM windmill.actual WHERE customer_id = v_cust_id AND sc_id = v_service_id AND actual_year = v_year AND actual_month = v_month_int) *
+            (SELECT IFNULL(cost, 0) FROM masters.master_consumption_chargers WHERE charge_code = 'C011' LIMIT 1)
         ) as charge_tax_windmill,
-        (SELECT IFNULL(SUM(scad.allocation), 0) FROM windmill.solar_charge_allotment_header scah JOIN windmill.solar_charge_allotment_details scad ON scah.id = scad.header_id JOIN masters.master_consumption_chargers mcc ON scad.charge_id = mcc.id WHERE scah.customer_id = v_cust_id AND scah.service_id = v_service_id AND scah.year = v_year AND scah.month = v_month_int AND mcc.charge_code = 'C011') as charge_tax_solar;
+        IF(v_cust_name LIKE '%L&T%', 0,
+            (SELECT IFNULL(SUM(scad.allocation), 0) FROM windmill.solar_charge_allotment_header scah JOIN windmill.solar_charge_allotment_details scad ON scah.id = scad.header_id JOIN masters.master_consumption_chargers mcc ON scad.charge_id = mcc.id WHERE scah.customer_id = v_cust_id AND scah.service_id = v_service_id AND scah.year = v_year AND scah.month = v_month_int AND mcc.charge_code = 'C011')
+        ) as charge_tax_solar;
 END ;;
 DELIMITER ;
 /*!50003 SET sql_mode              = @saved_sql_mode */ ;

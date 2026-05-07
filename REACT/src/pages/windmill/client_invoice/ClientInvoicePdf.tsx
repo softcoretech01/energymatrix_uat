@@ -174,7 +174,7 @@ export default function ClientInvoicePdf() {
     const cSched = getCharge("Scheduling chrgs", Number(invoice.charge_scheduling) || 0);
     const cDSM = getCharge("DSM Charges", Number(invoice.charge_dsm) || 0);
     const cWheel = getCharge("Wheeling", Number(invoice.charge_wheeling) || 0);
-    const cTax = getCharge("Selfenergy chrgs", Number(invoice.charge_tax) || 0);
+    const cTax = getCharge("Self Generation Tax", Number(invoice.charge_tax) || 0);
 
     // Total charges to subtract
     const totalCharges = cMeter.amount + cOM.amount + cTrans.amount + cSysOpr.amount + cRkvah.amount + cImport.amount + cSched.amount + cDSM.amount + cWheel.amount + cTax.amount;
@@ -197,7 +197,7 @@ export default function ClientInvoicePdf() {
         { text: `(-) Scheduling chrgs = Rs.${formatAmount(cSched.amount)}`, calc: cSched.calculation },
         { text: `(-) DSM Charges = Rs.${formatAmount(cDSM.amount)}`, calc: cDSM.calculation },
         { text: `(-) Wheeling = Rs.${formatAmount(cWheel.amount)}`, calc: cWheel.calculation },
-        { text: `(-) Selfenergy chrgs = Rs.${formatAmount(cTax.amount)}`, calc: cTax.calculation },
+        { text: `(-) Self Generation Tax = Rs.${formatAmount(cTax.amount)}`, calc: cTax.calculation },
         { text: `Total = Rs.${formatAmount(totalCharges)}`, calc: dMap["Total"]?.calculation },
         { text: `Amount = Rs.${formatAmount(absDisplayAmount)}`, calc: undefined },
     ];

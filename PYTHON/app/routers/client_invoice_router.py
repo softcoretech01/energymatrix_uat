@@ -93,7 +93,7 @@ async def generate_invoice(data: dict, user: dict = Depends(get_current_user)):
                     ("DSM Charges", "dsm"),
                     ("Wheeling", "wheeling"),
                     ("Other Charges", "other"),
-                    ("Selfenergy chrgs", "tax"),
+                    ("Self Generation Tax", "tax"),
                 ]
 
                 d_map = {}
@@ -215,7 +215,7 @@ async def get_invoice_print_data(
         row_copy["details"] = details
         
         # Fallback: If Selfenergy chrgs is 0 or missing, try to fetch from actual table
-        tax_entry = next((d for d in details if d["field_name"] == "Selfenergy chrgs"), None)
+        tax_entry = next((d for d in details if d["field_name"] == "Self Generation Tax"), None)
         if not tax_entry or float(tax_entry["amount"]) == 0:
             month_map = {
                 "January": 1, "February": 2, "March": 3, "April": 4, "May": 5, "June": 6,
@@ -236,7 +236,7 @@ async def get_invoice_print_data(
             if tax_row and tax_row["total_tax"]:
                 actual_tax = float(tax_row["total_tax"])
                 if not tax_entry:
-                    row_copy["details"].append({"field_name": "Selfenergy chrgs", "amount": actual_tax})
+                    row_copy["details"].append({"field_name": "Self Generation Tax", "amount": actual_tax})
                 else:
                     tax_entry["amount"] = actual_tax
 
@@ -317,7 +317,7 @@ async def get_invoice_details(invoice_id: int, user: dict = Depends(get_current_
                     d_map[label] = {"amount": total, "calc": calc}
 
                 # Self Energy Tax
-                d_map["Selfenergy chrgs"] = {"amount": actual_tax, "calc": f"Summed from actual table = {actual_tax:,.2f}"}
+                d_map["Self Generation Tax"] = {"amount": actual_tax, "calc": f"Summed from actual table = {actual_tax:,.2f}"}
                 
                 total_charges = sum(v["amount"] for k, v in d_map.items() if k not in ["Units", "Rate"])
                 net_units_value = units * rate
@@ -339,7 +339,7 @@ async def get_invoice_details(invoice_id: int, user: dict = Depends(get_current_
                 while cursor.nextset(): pass
         
         # Even if rows existed, check if tax is 0 and try to update it
-        tax_entry = next((r for r in rows if r["field_name"] == "Selfenergy chrgs"), None)
+        tax_entry = next((r for r in rows if r["field_name"] == "Self Generation Tax"), None)
         if not tax_entry or float(tax_entry["amount"]) == 0:
              # Logic to re-calculate tax for existing rows via metadata SP
              cursor.callproc("windmill.sp_get_client_invoice_metadata", (invoice_id,))
@@ -364,7 +364,7 @@ async def get_invoice_details(invoice_id: int, user: dict = Depends(get_current_
 
                 if tax_row and tax_row["total_tax"]:
                     actual_tax = float(tax_row["total_tax"])
-                    cursor.callproc("windmill.sp_upsert_client_invoice_detail", (invoice_id, "Selfenergy chrgs", actual_tax))
+                    cursor.callproc("windmill.sp_upsert_client_invoice_detail", (invoice_id, "Self Generation Tax", actual_tax))
                     conn.commit()
                     # Refresh rows again
                     cursor.callproc("windmill.sp_get_client_invoice_details", (invoice_id,))
@@ -406,7 +406,7 @@ async def update_invoice_details(invoice_id: int, data: dict, user: dict = Depen
         charges_list = [
             "Meter", "O&M Charges", "Transmsn Chrgs", "Sys Opr Chrgs",
             "RkvAh", "Import Chrgs", "Scheduling chrgs", "DSM Charges",
-            "Wheeling", "Selfenergy chrgs"
+            "Wheeling", "Self Generation Tax"
         ]
         total_charges = sum(d_map.get(c, 0) for c in charges_list)
         final_amount = net_units_value - total_charges
