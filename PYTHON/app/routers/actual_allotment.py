@@ -55,25 +55,48 @@ async def get_actuals_pdf(client_eb_id: int):
             "month": first["actual_month"],
             "year": first["actual_year"],
             "self_gen_tax": float(first["self_gen_tax"]) if first.get("self_gen_tax") is not None else 0.0,
-            
         }
 
-        # ✅ Table data
-        table_data = [
-            {
-                "windmill": row["windmill"],
-                "wheeling_charges": float(row["wheeling_charges"] or 0),
-            }
-            for row in rows
-        ]
+        # ✅ Get original wheeling charges to recalculate precision if needed
+        # We fetch original wheeling charges from eb_bill_adjustment_charges
+        cursor.execute("""
+            SELECT energy_number, wheeling_charges 
+            FROM eb_bill_adjustment_charges 
+            WHERE eb_bill_header_id = %s
+        """, (client_eb_id,))
+        adj_rows = cursor.fetchall()
+        adj_map = {row["energy_number"]: float(row["wheeling_charges"] or 0) for row in adj_rows}
 
-        # ✅ Total
-        total = float(first["total_wheeling"])
+        # ✅ Table data
+        table_data = []
+        calculated_total = 0.0
+
+        for row in rows:
+            windmill = row["windmill"]
+            sys_val = float(row["wheeling_charges"] or 0)
+            orig_charges = adj_map.get(windmill, 0.0)
+
+            # High Precision Recalculation (Concept: 1.083/2 and 1.069/2)
+            if orig_charges > 0 and sys_val > 0:
+                approx_rate = orig_charges / sys_val
+                rate1 = 1.083 / 2.0  # 0.5415
+                rate2 = 1.069 / 2.0  # 0.5345
+                
+                if abs(approx_rate - 0.54) < 0.01:
+                    sys_val = orig_charges / rate1
+                elif abs(approx_rate - 0.53) < 0.01:
+                    sys_val = orig_charges / rate2
+
+            table_data.append({
+                "windmill": windmill,
+                "wheeling_charges": sys_val,
+            })
+            calculated_total += sys_val
 
         return {
             "header": header,
             "data": table_data,
-            "total": total
+            "total": calculated_total
         }
 
     except Exception as e:

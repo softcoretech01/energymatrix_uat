@@ -244,7 +244,7 @@ async def get_actual_allotment_list(
                 safe_r['reconciliation_status'] = 'Missing Manual PDF'
             else:
                 sys_val = float(r['system_wheeling_charge'] or 0)
-                safe_r['reconciliation_status'] = 'Matched' if abs(manual_val - sys_val) < 0.01 else 'Mismatched'
+                safe_r['reconciliation_status'] = 'Matched' if abs(manual_val - sys_val) < 0.0001 else 'Mismatched'
             final_result.append(safe_r)
         
         return final_result
@@ -308,25 +308,47 @@ async def get_reconciliation_details(client_eb_id: int):
             for row in actual_rows
         }
         
-        cursor.callproc("windmill.sp_get_manual_allotment_details", (s_id, b_year, b_month))
+        # 2. Get manual allotment totals from actual_allotment table
+        cursor.execute("""
+            SELECT mw.windmill_number, aa.allotment_total, aa.pdf_file_path
+            FROM actual_allotment aa
+            JOIN masters.master_windmill mw ON aa.windmill_id = mw.id
+            WHERE aa.year = %s AND aa.month = %s AND aa.service_id = %s
+        """, (b_year, b_month, s_id))
         manual_rows = cursor.fetchall()
-        while cursor.nextset(): pass
-        manual_map = {str(row['windmill_number']): float(row['allotment_total'] or 0) for row in manual_rows}
+        manual_map = {str(row['windmill_number']): {"total": float(row['allotment_total'] or 0), "is_uploaded": bool(row['pdf_file_path'])} for row in manual_rows}
 
+        # 3. Combine data
         all_windmills = sorted([wm for wm in set(system_charges.keys()).union(set(manual_map.keys())) if wm and wm != 'None'])
         comparison = []
         for wm in all_windmills:
             sys_data = system_charges.get(wm, {"calculated_value": 0.0, "original_charges": 0.0})
-            sys_val = sys_data["calculated_value"]
             orig_charges = sys_data["original_charges"]
-            man_val = manual_map.get(wm, 0.0)
+            sys_val = sys_data["calculated_value"]
+            
+            # ✅ High Precision Recalculation (Concept: 1.083/2 and 1.069/2)
+            if orig_charges > 0 and sys_val > 0:
+                approx_rate = orig_charges / sys_val
+                rate1 = 1.083 / 2.0 # 0.5415
+                rate2 = 1.069 / 2.0 # 0.5345
+                
+                # Use the precise rate if the current one is close to 0.54 or 0.53
+                if abs(approx_rate - 0.54) < 0.01:
+                    sys_val = orig_charges / rate1
+                elif abs(approx_rate - 0.53) < 0.01:
+                    sys_val = orig_charges / rate2
+            
+            man_data = manual_map.get(wm, {"total": 0.0, "is_uploaded": False})
+            man_val = man_data["total"]
+            is_uploaded = man_data["is_uploaded"]
             
             comparison.append({
                 "windmill": wm, 
                 "system_wheeling_charge": sys_val, 
                 "original_wheeling_charges": orig_charges,
                 "manual_adjusted_total": man_val,
-                "status": 'Matched' if abs(sys_val - man_val) < 0.01 else 'Mismatched'
+                "is_uploaded": is_uploaded,
+                "status": 'Matched' if abs(sys_val - man_val) < 0.0001 else 'Mismatched'
             })
 
         month_names = ["January","February","March","April","May","June","July","August","September","October","November","December"]
@@ -361,18 +383,46 @@ async def get_actuals_pdf(client_eb_id: int):
             "year": first["actual_year"],
             "self_gen_tax": float(first["self_gen_tax"]) if first.get("self_gen_tax") is not None else 0.0,
         }
-        table_data = [
-            {
-                "windmill": row["windmill"],
-                "wheeling_charges": float(row["wheeling_charges"] or 0),
-            }
-            for row in rows
-        ]
-        total = float(first["total_wheeling"])
+
+        # ✅ Get original wheeling charges to recalculate precision if needed
+        cursor.execute("""
+            SELECT energy_number, wheeling_charges 
+            FROM eb_bill_adjustment_charges 
+            WHERE eb_bill_header_id = %s
+        """, (client_eb_id,))
+        adj_rows = cursor.fetchall()
+        adj_map = {row["energy_number"]: float(row["wheeling_charges"] or 0) for row in adj_rows}
+
+        # ✅ Table data
+        table_data = []
+        calculated_total = 0.0
+
+        for row in rows:
+            windmill = row["windmill"]
+            sys_val = float(row["wheeling_charges"] or 0)
+            orig_charges = adj_map.get(windmill, 0.0)
+
+            # High Precision Recalculation (Concept: 1.083/2 and 1.069/2)
+            if orig_charges > 0 and sys_val > 0:
+                approx_rate = orig_charges / sys_val
+                rate1 = 1.083 / 2.0  # 0.5415
+                rate2 = 1.069 / 2.0  # 0.5345
+                
+                if abs(approx_rate - 0.54) < 0.01:
+                    sys_val = orig_charges / rate1
+                elif abs(approx_rate - 0.53) < 0.01:
+                    sys_val = orig_charges / rate2
+
+            table_data.append({
+                "windmill": windmill,
+                "wheeling_charges": sys_val,
+            })
+            calculated_total += sys_val
+
         return {
             "header": header,
             "data": table_data,
-            "total": total
+            "total": calculated_total
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

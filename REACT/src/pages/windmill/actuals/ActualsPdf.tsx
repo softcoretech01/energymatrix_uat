@@ -90,7 +90,7 @@ export default function ActualsPdf() {
                             <tr key={index}>
                                 <td className="border p-2">{item.windmill}</td>
                                 <td className="border p-2">
-                                    {(Number(item.wheeling_charges) || 0).toFixed(2)}
+                                {(Number(item.wheeling_charges) || 0).toFixed(2)}
                                 </td>
                             </tr>
                         ))}

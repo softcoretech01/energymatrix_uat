@@ -108,11 +108,18 @@ export default function ActualsReconcile() {
                                     ) : (
                                         reconcileDetails.details.map((item: any, idx: number) => (
                                             <tr key={idx} className="hover:bg-slate-50 transition-colors">
-                                                <td className="px-6 py-4 font-bold text-slate-700">{item.windmill}</td>
+                                                <td className="px-6 py-4 text-slate-900 font-medium">
+                                                    {item.windmill}
+                                                    {!item.is_uploaded && (
+                                                        <span className="text-[10px] text-rose-500 font-bold ml-2 uppercase tracking-wider">
+                                                            (not uploaded)
+                                                        </span>
+                                                    )}
+                                                </td>
                                                 <td
                                                     className="px-6 py-4 text-right tabular-nums font-medium cursor-help"
                                                     title={item.system_wheeling_charge > 0 && item.original_wheeling_charges > 0
-                                                        ? `${Number(item.system_wheeling_charge).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} = ${Number(item.original_wheeling_charges).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / ${(item.original_wheeling_charges / item.system_wheeling_charge).toFixed(2)}`
+                                                        ? `${Number(item.system_wheeling_charge).toLocaleString('en-IN', { minimumFractionDigits: 4, maximumFractionDigits: 4 })} = ${Number(item.original_wheeling_charges).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / ${(item.original_wheeling_charges / item.system_wheeling_charge).toFixed(4)}`
                                                         : undefined
                                                     }
                                                 >
@@ -122,7 +129,7 @@ export default function ActualsReconcile() {
                                                     {Number(item.manual_adjusted_total).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                 </td>
                                                 <td className="px-6 py-4 text-center tabular-nums font-bold">
-                                                    <span className={Math.abs(item.system_wheeling_charge - item.manual_adjusted_total) < 0.01 ? "text-emerald-600" : "text-rose-600"}>
+                                                    <span className={Math.abs(item.system_wheeling_charge - item.manual_adjusted_total) < 0.0001 ? "text-emerald-600" : "text-rose-600"}>
                                                         {Number(item.system_wheeling_charge - item.manual_adjusted_total).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                     </span>
                                                 </td>

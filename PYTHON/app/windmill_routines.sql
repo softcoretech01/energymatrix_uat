@@ -545,7 +545,7 @@ CREATE DEFINER=`root`@`localhost` PROCEDURE `insert_eb_bill_adjustment_charge`(
     IN p_modified_by INT
 )
 BEGIN
-    DECLARE v_calculated_wheeling DECIMAL(12,2);
+    DECLARE v_calculated_wheeling DECIMAL(18,5);
     DECLARE v_bill_year INT;
     DECLARE v_bill_month INT;
     DECLARE v_customer_id INT;
@@ -600,8 +600,8 @@ BEGIN
     -- Prevent division by zero
     IF v_whlc_factor = 0 THEN SET v_whlc_factor = 0.54; END IF;
 
-    -- 4. Calculate actual wheeling value
-    SET v_calculated_wheeling = ROUND(COALESCE(p_wheeling_charges,0) / v_whlc_factor, 2);
+    -- 4. Calculate actual wheeling value (No rounding as per requirement)
+    SET v_calculated_wheeling = COALESCE(p_wheeling_charges,0) / v_whlc_factor;
 
     -- 5. Insert adjustment
     INSERT INTO eb_bill_adjustment_charges(
