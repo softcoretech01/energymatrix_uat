@@ -31,6 +31,7 @@ export default function WindmillMasterAdd() {
     const [type, setType] = React.useState("windmill");
     const [transactionLoss, setTransactionLoss] = React.useState("0.00");
     const [minimumLevelGeneration, setMinimumLevelGeneration] = React.useState("");
+    const [allotmentThreshold, setAllotmentThreshold] = React.useState("");
     const [portalUrl, setPortalUrl] = React.useState("");
     const [portalUsername, setPortalUsername] = React.useState("");
     const [portalPassword, setPortalPassword] = React.useState("");
@@ -249,6 +250,7 @@ export default function WindmillMasterAdd() {
             insurance_from_date: insuranceFromDate ? format(insuranceFromDate, "yyyy-MM-dd") : undefined,
             insurance_to_date: insuranceToDate ? format(insuranceToDate, "yyyy-MM-dd") : undefined,
             minimum_level_generation: minimumLevelGeneration ? parseFloat(minimumLevelGeneration) : undefined,
+            allotment_threshold: allotmentThreshold ? parseFloat(allotmentThreshold) : undefined,
             units_expiring: safeString(unitsExpiring),
             portal_url: safeString(portalUrl),
             username: safeString(portalUsername),
@@ -758,6 +760,15 @@ export default function WindmillMasterAdd() {
                                                 value={minimumLevelGeneration}
                                                 onChange={(e) => setMinimumLevelGeneration(e.target.value)}
                                                 placeholder="Enter Min Level Generation"
+                                                className="bg-white border-slate-300 h-9 text-xs"
+                                            />
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <label className="text-sm font-semibold text-slate-700">Allotment Threshold</label>
+                                            <Input
+                                                value={allotmentThreshold}
+                                                onChange={(e) => setAllotmentThreshold(e.target.value)}
+                                                placeholder="Enter Allotment Threshold"
                                                 className="bg-white border-slate-300 h-9 text-xs"
                                             />
                                         </div>

@@ -679,7 +679,8 @@ CREATE DEFINER=`root`@`%` PROCEDURE `sp_add_windmill`(
   IN p_insurance_person_phone VARCHAR(50),
   IN p_insurance_from_date DATE,
   IN p_insurance_to_date DATE,
-  IN p_minimum_level_generation DECIMAL(12,2),
+  IN p_minimum_level_generation DECIMAL(12,2),
+  IN p_allotment_threshold DECIMAL(12,2),
   IN p_units_expiring VARCHAR(50),
   IN p_portal_url VARCHAR(250),
   IN p_username VARCHAR(50),
@@ -695,7 +696,7 @@ BEGIN
     amc_type, amc_head, amc_head_contact, amc_from_date, amc_to_date,
     insurance_policy_number, insurance_company_name, insurance_company_number,
     insurance_from_date, insurance_to_date,
-    minimum_level_generation, units_expiring,
+    minimum_level_generation, allotment_threshold, units_expiring,
     open_access_portal, portal_username, portal_password,
     is_submitted, created_by, created_at
   )
@@ -706,7 +707,7 @@ BEGIN
     p_amc_type, p_amc_head, p_amc_head_contact, p_amc_from_date, p_amc_to_date,
     p_insurance_policy_number, p_insurance_person_name, p_insurance_person_phone,
     p_insurance_from_date, p_insurance_to_date,
-    p_minimum_level_generation, p_units_expiring,
+    p_minimum_level_generation, p_allotment_threshold, p_units_expiring,
     p_portal_url, p_username, p_password,
     p_is_submitted, p_created_by, NOW()
   );
@@ -3719,7 +3720,8 @@ CREATE DEFINER=`root`@`%` PROCEDURE `sp_update_windmill`(
   IN p_insurance_person_phone VARCHAR(50),
   IN p_insurance_from_date DATE,
   IN p_insurance_to_date DATE,
-  IN p_minimum_level_generation DECIMAL(12,2),
+  IN p_minimum_level_generation DECIMAL(12,2),
+  IN p_allotment_threshold DECIMAL(12,2),
   IN p_units_expiring VARCHAR(50),
   IN p_portal_url VARCHAR(250),
   IN p_username VARCHAR(50),
@@ -3752,7 +3754,8 @@ BEGIN
     insurance_company_number = p_insurance_person_phone,
     insurance_from_date = p_insurance_from_date,
     insurance_to_date = p_insurance_to_date,
-    minimum_level_generation = p_minimum_level_generation,
+    minimum_level_generation = p_minimum_level_generation,
+    allotment_threshold = p_allotment_threshold,
     units_expiring = p_units_expiring,
     open_access_portal = p_portal_url,
     portal_username = p_username,

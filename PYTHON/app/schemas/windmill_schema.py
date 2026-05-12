@@ -39,6 +39,7 @@ class WindmillCreate(BaseModel):
     insurance_to_date: Optional[date] = None
 
     minimum_level_generation: Optional[float] = None
+    allotment_threshold: Optional[float] = None
     units_expiring: Optional[str] = None
 
     portal_url: Optional[str] = None
@@ -90,6 +91,7 @@ class WindmillResponse(BaseModel):
     insurance_to_date: Optional[date]
 
     minimum_level_generation: Optional[float]
+    allotment_threshold: Optional[float]
     units_expiring: Optional[float]
 
     portal_url: Optional[str]

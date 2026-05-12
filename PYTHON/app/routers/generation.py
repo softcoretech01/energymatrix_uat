@@ -41,6 +41,7 @@ class DailyGenerationResponse(BaseModel):
     created_by: str
     created_at: datetime
     windmill_name: Optional[str] = None
+    minimum_level_generation: Optional[float] = None
 
     class Config:
         from_attributes = True

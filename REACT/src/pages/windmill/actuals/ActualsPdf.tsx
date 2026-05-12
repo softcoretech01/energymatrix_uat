@@ -16,6 +16,7 @@ export default function ActualsPdf() {
     const [updatedTotal, setUpdatedTotal] = useState(0);
     const [grandTotal, setGrandTotal] = useState(0);
     const [saving, setSaving] = useState(false);
+    const [focusedIndex, setFocusedIndex] = useState(null);
 
     useEffect(() => {
         fetchPdfData();
@@ -81,7 +82,8 @@ export default function ActualsPdf() {
             fetchPdfData(); // Refresh to get precise backend calculations
         } catch (err) {
             console.error("Error saving units:", err);
-            toast.error("Failed to save units");
+            const msg = err.response?.data?.message || "Failed to save units";
+            toast.error(msg);
         } finally {
             setSaving(false);
         }
@@ -134,7 +136,7 @@ export default function ActualsPdf() {
 
                         <p>
                             <b>Self Generation Tax:</b>{" "}
-                            {(Number(header?.self_gen_tax) || 0).toFixed(3)}{" "}
+                            {(Number(header?.self_gen_tax) || 0).toLocaleString('en-IN', { minimumFractionDigits: 3, maximumFractionDigits: 3 })}{" "}
                         </p>
                     </div>
                 )}
@@ -145,8 +147,8 @@ export default function ActualsPdf() {
                         <tr className="bg-gray-100">
                             <th className="border p-2 text-left">Windmill</th>
                             <th className="border p-2 text-left">Windmill Name</th>
-                            <th className="border p-2 text-left">Wheeling Units</th>
-                            <th className="border p-2 text-left no-print">Updated Wheeling Units</th>
+                            <th className="border p-2 text-right">Wheeling Units</th>
+                            <th className="border p-2 text-right no-print">Updated Wheeling Units</th>
                         </tr>
                     </thead>
 
@@ -155,15 +157,26 @@ export default function ActualsPdf() {
                             <tr key={index}>
                                 <td className="border p-2">{item.windmill}</td>
                                 <td className="border p-2">{item.windmill_name}</td>
-                                <td className="border p-2">
-                                    {(Number(item.wheeling_charges) || 0).toFixed(2)}
+                                <td className="border p-2 text-right">
+                                    {(Number(item.wheeling_charges) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </td>
                                 <td className="border p-2 no-print">
                                     <Input
-                                        type="number"
-                                        value={item.updated_windmill_unit}
-                                        onChange={(e) => handleUpdateUnit(index, e.target.value)}
-                                        className="h-8 text-xs"
+                                        type="text"
+                                        value={
+                                            focusedIndex === index 
+                                            ? item.updated_windmill_unit 
+                                            : (item.updated_windmill_unit === "" ? "" : Number(item.updated_windmill_unit).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
+                                        }
+                                        onChange={(e) => {
+                                            const rawValue = e.target.value.replace(/,/g, '');
+                                            if (rawValue === "" || !isNaN(Number(rawValue)) || rawValue === ".") {
+                                                handleUpdateUnit(index, rawValue);
+                                            }
+                                        }}
+                                        onFocus={() => setFocusedIndex(index)}
+                                        onBlur={() => setFocusedIndex(null)}
+                                        className="h-8 text-xs text-right"
                                     />
                                 </td>
                             </tr>
@@ -172,11 +185,11 @@ export default function ActualsPdf() {
                         {/* Total */}
                         <tr className="bg-gray-50 font-bold">
                             <td className="border p-2" colSpan={2}>Total Units</td>
-                            <td className="border p-2">
-                                {(Number(total) || 0).toFixed(2)}
+                            <td className="border p-2 text-right">
+                                {(Number(total) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </td>
-                            <td className="border p-2 no-print">
-                                {(Number(updatedTotal) || 0).toFixed(2)}
+                            <td className="border p-2 text-right no-print">
+                                {(Number(updatedTotal) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </td>
                         </tr>
 

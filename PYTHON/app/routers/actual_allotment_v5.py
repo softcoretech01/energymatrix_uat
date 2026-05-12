@@ -482,19 +482,25 @@ async def update_windmill_units(req: UpdateUnitsRequest):
         for update in req.updates:
             actual_id = update.get("actual_id")
             val = float(update.get("updated_windmill_unit") or 0)
-            tax_val = val * tax_rate
-
+            
             if actual_id is not None:
-                cursor.execute("""
-                    UPDATE windmill.actual 
-                    SET updated_windmill_unit = %s,
-                        self_gen_tax = %s
-                    WHERE id = %s
-                """, (val, tax_val, actual_id))
+                try:
+                    cursor.callproc("sp_update_actual_units", (actual_id, val, tax_rate))
+                except pymysql.err.OperationalError as e:
+                    if 'Threshold exceeded' in str(e):
+                        # Get windmill number for better error message if possible
+                        cursor.execute("SELECT energy_number FROM actual WHERE id = %s", (actual_id,))
+                        w_row = cursor.fetchone()
+                        wm_no = w_row['energy_number'] if w_row else "Unknown"
+                        raise HTTPException(status_code=400, detail=f"Threshold exceeded for windmill {wm_no}. Please check the allotment threshold.")
+                    raise e
 
         conn.commit()
         return {"status": "success", "message": "Units updated successfully"}
 
+    except HTTPException as he:
+        conn.rollback()
+        raise he
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))

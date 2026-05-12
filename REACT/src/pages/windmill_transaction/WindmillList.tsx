@@ -382,7 +382,12 @@ export default function WindmillList() {
                                                 <TableCell className="py-2 text-sm">{formatDate(new Date(row.transaction_date))}</TableCell>
                                                 <TableCell className="py-2 text-sm">{row.windmill_number}</TableCell>
                                                 <TableCell className="py-2 text-sm font-semibold">{row.windmill_name || "N/A"}</TableCell>
-                                                <TableCell className="py-2 text-sm">{row.units}</TableCell>
+                                                <TableCell className={cn(
+                                                    "py-2 text-sm",
+                                                    (row.units !== null && row.minimum_level_generation !== null && row.units < row.minimum_level_generation) && "text-red-600 font-bold"
+                                                )}>
+                                                    {row.units}
+                                                </TableCell>
                                                 <TableCell className="py-2">
                                                     <Badge
                                                         className={cn(

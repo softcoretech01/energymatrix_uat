@@ -50,6 +50,7 @@ export default function WindmillMasterEdit() {
     const [windmillCapacity, setWindmillCapacity] = useState("");
     const [capacityId, setCapacityId] = useState("");
     const [minimumLevelGeneration, setMinimumLevelGeneration] = useState("");
+    const [allotmentThreshold, setAllotmentThreshold] = useState("");
     const [portalUrl, setPortalUrl] = useState("");
     const [portalUsername, setPortalUsername] = useState("");
     const [portalPassword, setPortalPassword] = useState("");
@@ -202,6 +203,7 @@ export default function WindmillMasterEdit() {
                         : "0.00"
                 );
                 setMinimumLevelGeneration(data.minimum_level_generation ? String(data.minimum_level_generation) : "");
+                setAllotmentThreshold(data.allotment_threshold ? String(data.allotment_threshold) : "");
                 setUnitsExpiring(data.units_expiring ? String(data.units_expiring).toLowerCase() : "monthly");
                 setPortalUrl(data.open_access_portal || data.portal_url || "");
                 setPortalUsername(data.portal_username || data.username || "");
@@ -394,6 +396,7 @@ export default function WindmillMasterEdit() {
             insurance_from_date: insuranceFromDate ? format(insuranceFromDate, "yyyy-MM-dd") : undefined,
             insurance_to_date: insuranceToDate ? format(insuranceToDate, "yyyy-MM-dd") : undefined,
             minimum_level_generation: minimumLevelGeneration ? parseFloat(minimumLevelGeneration) : undefined,
+            allotment_threshold: allotmentThreshold ? parseFloat(allotmentThreshold) : undefined,
             units_expiring: safeString(unitsExpiring),
             portal_url: safeString(portalUrl),
             username: safeString(portalUsername),
@@ -925,6 +928,16 @@ export default function WindmillMasterEdit() {
                                                 value={minimumLevelGeneration}
                                                 onChange={(e) => setMinimumLevelGeneration(e.target.value)}
                                                 placeholder="Enter Min Level Generation"
+                                                className="bg-white border-slate-300 h-9 text-xs"
+                                                disabled={isReadOnly}
+                                            />
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <label className="text-sm font-semibold text-slate-700">Allotment Threshold</label>
+                                            <Input
+                                                value={allotmentThreshold}
+                                                onChange={(e) => setAllotmentThreshold(e.target.value)}
+                                                placeholder="Enter Allotment Threshold"
                                                 className="bg-white border-slate-300 h-9 text-xs"
                                                 disabled={isReadOnly}
                                             />

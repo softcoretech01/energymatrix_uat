@@ -32,6 +32,7 @@ class Windmill(Base):
     insurance_from_date = Column(Date)
     insurance_to_date = Column(Date)
     minimum_level_generation = Column(DECIMAL(12,2))
+    allotment_threshold = Column(DECIMAL(12,2))
     units_expiring = Column(String(50)) # enum('Monthly', 'Yearly', ...)
     open_access_portal = Column(String(250))
     portal_username = Column(String(50))
