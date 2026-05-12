@@ -22,6 +22,7 @@ type SolarCharge = {
 type SolarStatementData = {
     company_name?: string;
     windmill_number?: string;
+    windmill_name?: string;
     slots?: SolarSlots;
     charges?: SolarCharge[];
     month?: string | number;
@@ -89,8 +90,12 @@ export default function EBStatementSolarPdf() {
                         setSaved(true);
                     }
                     if (json.parsed) {
-                        setData(json.parsed);
-                        sessionStorage.setItem("ebStatementSolarData", JSON.stringify(json.parsed));
+                        const parsedWithExtra = {
+                            ...json.parsed,
+                            windmill_name: json.windmill_name || json.parsed.windmill_name
+                        };
+                        setData(parsedWithExtra);
+                        sessionStorage.setItem("ebStatementSolarData", JSON.stringify(parsedWithExtra));
                     }
                 }
             } catch (e) {
@@ -279,7 +284,7 @@ export default function EBStatementSolarPdf() {
                         <CardTitle className="text-lg">Header Information</CardTitle>
                     </CardHeader>
                     <CardContent className="pt-4">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                             <div className="flex flex-col space-y-1">
                                 <span className="flex items-center text-xs font-medium text-slate-500 uppercase tracking-wider">
                                     <Briefcase className="mr-2 h-3.5 w-3.5" /> Company Name
@@ -292,7 +297,13 @@ export default function EBStatementSolarPdf() {
                                 </span>
                                 <span className="text-sm font-bold font-mono" style={{ color: 'firebrick' }}>{data.windmill_number || "N/A"}</span>
                             </div>
-                            <div className="flex flex-col space-y-1">
+                            <div className="flex flex-col space-y-1 md:pr-6">
+                                <span className="flex items-center text-xs font-medium text-slate-500 uppercase tracking-wider">
+                                    <Info className="mr-2 h-3.5 w-3.5" /> Windmill Name
+                                </span>
+                                <span className="text-sm font-bold text-slate-800">{data.windmill_name || "N/A"}</span>
+                            </div>
+                            <div className="flex flex-col space-y-1 md:border-l md:pl-6">
                                 <span className="flex items-center text-xs font-medium text-slate-500 uppercase tracking-wider">
                                     <Calendar className="mr-2 h-3.5 w-3.5" /> Month / Year
                                 </span>

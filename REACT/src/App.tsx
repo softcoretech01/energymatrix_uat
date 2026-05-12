@@ -84,6 +84,8 @@ import EBStatementPdf from "./pages/eb_statement/EBStatementPdf";
 import CompanyShares from "./pages/company_shares/CompanyShares";
 import EBChargeComparison from "./pages/eb_statement/EBChargeComparison";
 import EBSolarChargeComparison from "./pages/eb_statement_solar/EBSolarChargeComparison";
+import UserSessionsPage from "./pages/user_sessions/UserSessionsPage";
+import ErrorLogsPage from "./pages/admin/ErrorLogsPage";
 
 
 
@@ -212,6 +214,9 @@ const App = () => (
               <Route path="/master/company-shares" element={<CompanyShares />} />
               <Route path="/eb-statement/pdf" element={<EBStatementPdf />} />
               <Route path="/eb-statement/comparison" element={<EBChargeComparison />} />
+              <Route path="/admin/sessions" element={<UserSessionsPage />} />
+              <Route path="/admin/error-logs" element={<ErrorLogsPage />} />
+
 
             </Route>
             <Route path="/login" element={<Login />} />

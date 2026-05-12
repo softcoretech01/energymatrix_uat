@@ -23,6 +23,7 @@ import { toast } from "sonner";
 interface SolarOption {
   id: number;
   windmill_number: string;
+  windmill_name: string;
 }
 
 export default function EBStatementSolarAdd() {
@@ -74,9 +75,10 @@ export default function EBStatementSolarAdd() {
           setSolarOptions([]);
         } else {
           const solarList = list
-            .map((itm: { id: number; windmill_number?: string; solar_number?: string }) => ({
+            .map((itm: { id: number; windmill_number?: string; solar_number?: string; windmill_name?: string }) => ({
               id: itm.id,
               windmill_number: (itm.windmill_number || itm.solar_number || "").trim(),
+              windmill_name: itm.windmill_name || "",
             }))
             .filter((itm) => itm.windmill_number !== "");
 
@@ -98,6 +100,7 @@ export default function EBStatementSolarAdd() {
               .map((itm) => ({
                 id: itm.id,
                 windmill_number: (itm.windmill_number || itm.solar_number || "").trim(),
+                windmill_name: itm.windmill_name || "",
               }))
               .filter((itm) => itm.windmill_number !== "");
             setSolarOptions(solarList);
@@ -172,7 +175,7 @@ export default function EBStatementSolarAdd() {
 
         <div className="p-4">
           <div className="space-y-4 px-4 pt-2">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-slate-600">Solar Number</label>
                 <Select value={selectedSolarId} onValueChange={(value) => {
@@ -202,6 +205,14 @@ export default function EBStatementSolarAdd() {
                   </SelectContent>
                 </Select>
               </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-600">Windmill Name</label>
+                <div className="h-9 w-full bg-slate-50 border border-slate-300 rounded-md px-3 py-2 text-sm text-slate-700 font-medium overflow-hidden text-ellipsis whitespace-nowrap">
+                  {solarOptions.find(o => o.id.toString() === selectedSolarId)?.windmill_name || "---"}
+                </div>
+              </div>
+
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-slate-600">Month</label>
                 <Select value={selectedMonth} onValueChange={setSelectedMonth}>
@@ -319,7 +330,11 @@ export default function EBStatementSolarAdd() {
                       }
 
                       // Check for mismatch error (wrong month/year)
-                      if (res.status === 400 && message.toLowerCase().includes("selected a wrong")) {
+                      if (res.status === 400 && (
+                        message.toLowerCase().includes("selected a wrong") || 
+                        message.toLowerCase().includes("mismatch") ||
+                        message.toLowerCase().includes("does not match")
+                      )) {
                         setMismatchMessage(message);
                         setShowMismatchDialog(true);
                         return;

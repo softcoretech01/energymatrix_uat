@@ -96,7 +96,8 @@ export default function ClientInvoiceAdd() {
             navigate(`/windmill/client-invoice/pdf/${res.data.invoice_id}`);
         } catch (error: any) {
             console.error("Error generating invoice:", error);
-            toast.error(error?.response?.data?.detail || "Failed to generate invoice");
+            const errMsg = error?.response?.data?.message || error?.response?.data?.detail || "Failed to generate invoice";
+            toast.error(errMsg);
         } finally {
             setGenerating(false);
         }

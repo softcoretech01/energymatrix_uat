@@ -44,8 +44,28 @@ export const SessionManager: React.FC<{ children: React.ReactNode }> = ({
     setShowSessionWarning(false);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    // Record logout in DB before clearing state
+    try {
+      const token = localStorage.getItem("access_token");
+      const sessionId = localStorage.getItem("session_id");
+      if (token) {
+        await fetch(`${import.meta.env.VITE_BACKEND_URL ?? "http://127.0.0.1:8000"}/api/auth/logout`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`,
+          },
+          body: JSON.stringify({ session_id: sessionId ? parseInt(sessionId) : null }),
+        });
+      }
+    } catch (e) {
+      console.warn("Session timeout logout call failed:", e);
+    }
+
     localStorage.removeItem("access_token");
+    localStorage.removeItem("user");
+    localStorage.removeItem("session_id");
     navigate("/login", { replace: true });
   };
 

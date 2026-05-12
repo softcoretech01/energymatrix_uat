@@ -174,7 +174,10 @@ export default function ClientInvoicePdf() {
     const cSched = getCharge("Scheduling chrgs", Number(invoice.charge_scheduling) || 0);
     const cDSM = getCharge("DSM Charges", Number(invoice.charge_dsm) || 0);
     const cWheel = getCharge("Wheeling", Number(invoice.charge_wheeling) || 0);
-    const cTax = getCharge("Self Generation Tax", Number(invoice.charge_tax) || 0);
+    let cTax = getCharge("Self Generation Tax", Number(invoice.charge_tax) || 0);
+    if (invoice.customer_name && invoice.customer_name.includes("L&T")) {
+        cTax = { amount: 0, calculation: "Exempted for L&T" };
+    }
 
     // Total charges to subtract
     const totalCharges = cMeter.amount + cOM.amount + cTrans.amount + cSysOpr.amount + cRkvah.amount + cImport.amount + cSched.amount + cDSM.amount + cWheel.amount + cTax.amount;

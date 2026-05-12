@@ -85,8 +85,12 @@ async def upload_eb_statement_solar(
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files allowed")
 
+    # Get Solar Number for naming/check
+    cursor = conn.cursor()
+    solar_num = get_solar_number(cursor, solar_id)
+    cursor.close()
+
     # Check for duplicate upload (same solar_id, month, and year)
-    conn = get_connection(db_name="solar")
     cursor = conn.cursor()
     try:
         cursor.callproc("solar.sp_check_eb_solar_duplicate", (solar_id, month, year))
@@ -94,7 +98,7 @@ async def upload_eb_statement_solar(
         if existing_record:
             raise HTTPException(
                 status_code=409, 
-                detail=f"EB Statement (solar) for this ID already exists for {month} {year}. Please delete the existing record first if you want to re-upload."
+                detail=f"For {solar_num}, {month} eb statement, is already uploaded."
             )
     finally:
         cursor.close()
@@ -194,7 +198,7 @@ async def get_solar_windmill_numbers():
         cursor.callproc("masters.sp_get_solar_windmill_dropdown")
         rows = cursor.fetchall()
         data = [
-            {"id": row[0], "solar_number": row[1]}
+            {"id": row[0], "solar_number": row[1], "windmill_name": row[2]}
             for row in rows
         ]
         return {"status": "success", "data": data}
@@ -550,23 +554,20 @@ async def read_eb_statement_solar_pdf(
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files allowed")
 
+    # Get Solar Number for naming/check
+    solar_num = get_solar_number(cursor, solar_id)
+
     # Check for duplicate upload (same solar_id, month, and year)
-    conn = get_connection(db_name="solar")
-    cursor = conn.cursor()
     try:
         cursor.callproc("solar.sp_check_eb_solar_duplicate", (solar_id, month, year))
         existing_record = cursor.fetchone()
         if existing_record:
             raise HTTPException(
                 status_code=409, 
-                detail=f"EB Statement (solar) for this ID already exists for {month} {year}. Please delete the existing record first if you want to re-upload."
+                detail=f"For {solar_num}, {month} eb statement, is already uploaded."
             )
     finally:
-        cursor.close()
-        conn.close()
-
-    # Get Solar Number for naming
-    solar_num = get_solar_number(cursor, solar_id)
+        pass
     
     # Normalize month
     month_name = normalize_month(month)
@@ -737,9 +738,15 @@ async def read_eb_statement_solar_metadata(filename: str, user: dict = Depends(g
                 master_wm = row2[0] if row2 else ""
 
         if not master_wm and solar_id_val is not None:
-            cursor.callproc("masters.sp_get_windmill_number_by_id_only", (solar_id_val,))
+            cursor.execute("SELECT windmill_number, windmill_name FROM masters.master_windmill WHERE id = %s", (solar_id_val,))
             row2 = cursor.fetchone()
             master_wm = row2[0] if row2 else ""
+            windmill_name = row2[1] if row2 else ""
+        else:
+            # Fetch name for already resolved master_wm
+            cursor.execute("SELECT windmill_name FROM masters.master_windmill WHERE windmill_number = %s", (master_wm,))
+            row_name = cursor.fetchone()
+            windmill_name = row_name[0] if row_name else ""
 
         parsed_data = None
         warning_text = None
@@ -766,6 +773,7 @@ async def read_eb_statement_solar_metadata(filename: str, user: dict = Depends(g
             "is_submitted": is_submitted,
             "parsed": parsed_data,
             "warning": warning_text,
+            "windmill_name": windmill_name
         }
     finally:
         cursor.close()

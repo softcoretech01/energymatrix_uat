@@ -241,7 +241,7 @@ export default function WindmillList() {
                                 <SelectTrigger className="w-[100px] h-9 bg-white border-slate-300 text-sm">
                                     <SelectValue placeholder="Select Year" />
                                 </SelectTrigger>
-                                 <SelectContent>
+                                <SelectContent>
                                     <SelectItem value="all">All Year</SelectItem>
                                     {years.map((year) => (
                                         <SelectItem key={year} value={year.toString()}>
@@ -256,7 +256,7 @@ export default function WindmillList() {
                                 <SelectTrigger className="w-[120px] h-9 bg-white border-slate-300 text-sm">
                                     <SelectValue placeholder="Select Month" />
                                 </SelectTrigger>
-                                 <SelectContent>
+                                <SelectContent>
                                     <SelectItem value="all">All Month</SelectItem>
                                     {months.map((month) => (
                                         <SelectItem key={month.value} value={month.value}>

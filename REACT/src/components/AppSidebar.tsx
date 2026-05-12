@@ -13,7 +13,6 @@ import {
     SidebarMenuSubButton,
     SidebarMenuSubItem,
     SidebarTrigger,
-    useSidebar,
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import {
@@ -33,7 +32,9 @@ import {
     Activity,
     Users,
     PieChart,
-    LogOut
+    LogOut,
+    ShieldCheck,
+    Layers
 } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
@@ -45,34 +46,38 @@ import {
 export function AppSidebar() {
     const location = useLocation();
     const navigate = useNavigate();
-    const { setOpen } = useSidebar();
 
     const handleLogout = async () => {
-        // Call logout endpoint (best effort - don't wait for response)
-        try {
-            const token = localStorage.getItem("access_token");
-            if (token) {
-                // Call logout endpoint
-                await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/auth/logout`, {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "Authorization": `Bearer ${token}`
-                    },
-                    body: JSON.stringify({ token }),
-                });
-            }
-        } catch (error) {
-            console.warn("Logout endpoint call failed:", error);
-        }
+        const token = localStorage.getItem("access_token");
+        const sessionId = localStorage.getItem("session_id");
 
-        // Clear token and session data and send to login
+        // Clear all session data immediately for UI responsiveness
         localStorage.removeItem("access_token");
         localStorage.removeItem("user");
-        navigate("/login", { replace: true });
+        localStorage.removeItem("session_id");
+
+        // Call logout endpoint in the background
+        if (token) {
+            fetch(`${import.meta.env.VITE_BACKEND_URL}/api/auth/logout`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`
+                },
+                body: JSON.stringify({ session_id: sessionId ? parseInt(sessionId) : null }),
+            }).catch(err => console.warn("Background logout call failed", err));
+        }
+
+        // Hard redirect to login to ensure clean state
+        window.location.href = "/energymatrix/uat/login";
     };
 
-    const items = [
+    // RBAC: Get user rights from localStorage
+    const userStr = localStorage.getItem("user");
+    const user = userStr ? JSON.parse(userStr) : null;
+    const rights = user?.rights || [];
+
+    const allItems = [
         {
             title: "Master",
             url: "#",
@@ -137,11 +142,6 @@ export function AppSidebar() {
             url: "#",
             icon: Fan,
             items: [
-                //{
-                //   title: "Dashboard",
-                //   url: "/",
-                //   icon: LayoutDashboard,
-                //},
                 {
                     title: "Daily Generation",
                     url: "/windmill",
@@ -177,9 +177,6 @@ export function AppSidebar() {
                     url: "/windmill/client-invoice",
                     icon: ReceiptText,
                 },
-
-
-
             ]
         },
         {
@@ -194,51 +191,42 @@ export function AppSidebar() {
                 },
             ]
         },
-        // {
-        //     title: "SOP",
-        //     url: "#",
-        //     icon: ClipboardList,
-        //     items: [
-        //         {
-        //             title: "Customer",
-        //             url: "/sop/customer",
-        //             icon: Users,
-        //         },
-        //         {
-        //             title: "Shareholdings",
-        //             url: "/sop/shareholdings",
-        //             icon: PieChart,
-        //         }
-        //     ]
-        // },
-        // {
-        //     title: "Report",
-        //     url: "#",
-        //     icon: FileText,
-        //     items: [
-        //         {
-        //             title: "Bank Report",
-        //             url: "/bank-report",
-        //             icon: FileText,
-        //         },
-        //         {
-        //             title: "Forecast Report",
-        //             url: "/forecast-report",
-        //             icon: BarChart,
-        //         },
-        //         {
-        //             title: "Billing Report",
-        //             url: "/billing-bank-report",
-        //             icon: ReceiptText,
-        //         },
-        //         {
-        //             title: "Invoice",
-        //             url: "/invoice",
-        //             icon: ReceiptText,
-        //         },
-        //     ]
-        // }
+        {
+            title: "Logs",
+            url: "#",
+            icon: ShieldCheck,
+            items: [
+                {
+                    title: "User Sessions",
+                    url: "/admin/sessions",
+                    icon: Users,
+                },
+                {
+                    title: "Error Logs",
+                    url: "/admin/error-logs",
+                    icon: Layers,
+                },
+            ]
+        },
     ];
+
+    // Filter items based on can_read permission
+    const items = allItems.map(group => {
+        const filteredSubItems = group.items.filter(subItem => {
+            // Find the right for this screen
+            // Normalize: lowercase, remove dashes, remove extra spaces
+            const normalize = (s: string) => s.toLowerCase().replace(/[-]/g, ' ').replace(/\s+/g, ' ').trim();
+            const right = rights.find((r: any) =>
+                normalize(r.screen_name) === normalize(subItem.title)
+            );
+            return right ? right.can_read === 1 : false;
+        });
+
+        return {
+            ...group,
+            items: filteredSubItems
+        };
+    }).filter(group => group.items.length > 0);
 
     const isChildActive = (itemItems: any[]) => {
         return itemItems?.some(subItem =>
@@ -307,15 +295,7 @@ export function AppSidebar() {
                                                                     : "text-sidebar-foreground/80 hover:bg-white/10 hover:text-white"
                                                             )}
                                                         >
-                                                            <Link
-                                                                to={subItem.url}
-                                                                className="flex items-center gap-3"
-                                                                onClick={() => {
-                                                                    if (subItem.title === "Energy Allotment") {
-                                                                        setOpen(false);
-                                                                    }
-                                                                }}
-                                                            >
+                                                            <Link to={subItem.url} className="flex items-center gap-3">
                                                                 <subItem.icon className={cn(
                                                                     "w-4 h-4 transition-colors",
                                                                     isActive ? "text-white" : "text-sidebar-foreground/60"
@@ -352,7 +332,7 @@ export function AppSidebar() {
                         </SidebarMenuItem>
                     </SidebarMenu>
                     <div className="px-4 py-2 text-xs text-sidebar-foreground/70 text-center group-data-[collapsible=icon]:hidden">
-                        version 1.1.13
+                        version 1.1.14
                     </div>
                 </SidebarGroup>
             </SidebarContent>

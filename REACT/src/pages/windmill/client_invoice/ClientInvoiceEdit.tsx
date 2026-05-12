@@ -33,7 +33,7 @@ export default function ClientInvoiceEdit() {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
-    
+
     const [invoice, setInvoice] = useState<any>(null);
     const [details, setDetails] = useState<any[]>([]);
 
@@ -49,16 +49,17 @@ export default function ClientInvoiceEdit() {
             ]);
             setInvoice(infoRes.data.data);
             setDetails(detailsRes.data.data);
-        } catch (err) {
+        } catch (err: any) {
             console.error("Error fetching data:", err);
-            toast.error("Failed to load invoice data");
+            const errMsg = err?.response?.data?.message || err?.response?.data?.detail || "Failed to load invoice data";
+            toast.error(errMsg);
         } finally {
             setLoading(false);
         }
     };
 
     const handleAmountChange = (fieldName: string, value: string) => {
-        setDetails(prev => prev.map(d => 
+        setDetails(prev => prev.map(d =>
             d.field_name === fieldName ? { ...d, amount: value } : d
         ));
     };
@@ -83,9 +84,10 @@ export default function ClientInvoiceEdit() {
             await api.put(`/invoices/${invoice_id}/details`, payload);
             toast.success("Invoice updated successfully!");
             navigate(`/windmill/client-invoice/pdf/${invoice_id}`);
-        } catch (err) {
+        } catch (err: any) {
             console.error("Error saving invoice:", err);
-            toast.error("Failed to update invoice");
+            const errMsg = err?.response?.data?.message || err?.response?.data?.detail || "Failed to update invoice";
+            toast.error(errMsg);
         } finally {
             setSaving(false);
         }
@@ -102,11 +104,11 @@ export default function ClientInvoiceEdit() {
     if (!invoice) return <div className="p-8 text-center text-red-500">Invoice not found.</div>;
 
     // Mapping for UI
-    const dMap: Record<string, {amount: number, calculation?: string}> = {};
+    const dMap: Record<string, { amount: number, calculation?: string }> = {};
     details.forEach(d => {
-        dMap[d.field_name] = { 
-            amount: Number(d.amount), 
-            calculation: d.calculation 
+        dMap[d.field_name] = {
+            amount: Number(d.amount),
+            calculation: d.calculation
         };
     });
 
@@ -132,8 +134,8 @@ export default function ClientInvoiceEdit() {
                     </Button>
                     <h1 className="text-xl font-bold text-slate-800">Edit Invoice Amounts</h1>
                 </div>
-                <Button 
-                    onClick={handleSave} 
+                <Button
+                    onClick={handleSave}
                     disabled={saving}
                     className="bg-indigo-600 hover:bg-indigo-700 text-white px-6"
                 >
@@ -144,7 +146,7 @@ export default function ClientInvoiceEdit() {
 
             {/* ─── A4 Preview / Edit Container ─── */}
             <div className="bg-white mx-auto shadow-xl max-w-[210mm] min-h-[297mm] text-[11px] font-sans border border-gray-300 overflow-hidden">
-                
+
                 {/* Header Section (Non-editable info) */}
                 <div className="flex border-b border-gray-400 bg-slate-50/50">
                     <div className="w-1/2 border-r border-gray-400 p-4">
@@ -172,31 +174,31 @@ export default function ClientInvoiceEdit() {
                         </div>
                     </div>
                 </div>
-                
+
                 {/* Delivery and Terms Section (New Fields) */}
                 <div className="grid grid-cols-2 border-b border-gray-400">
                     <div className="border-r border-gray-400 p-2 space-y-2">
                         <div className="flex flex-col">
                             <label className="text-[9px] font-bold text-slate-500 uppercase">Delivery Note</label>
-                            <Input 
-                                value={invoice.delivery_note || ""} 
-                                onChange={(e) => setInvoice({...invoice, delivery_note: e.target.value})}
+                            <Input
+                                value={invoice.delivery_note || ""}
+                                onChange={(e) => setInvoice({ ...invoice, delivery_note: e.target.value })}
                                 className="h-7 text-[10px] border-slate-200"
                             />
                         </div>
                         <div className="flex flex-col">
                             <label className="text-[9px] font-bold text-slate-500 uppercase">Reference No. & Date.</label>
-                            <Input 
-                                value={invoice.reference_no_date || ""} 
-                                onChange={(e) => setInvoice({...invoice, reference_no_date: e.target.value})}
+                            <Input
+                                value={invoice.reference_no_date || ""}
+                                onChange={(e) => setInvoice({ ...invoice, reference_no_date: e.target.value })}
                                 className="h-7 text-[10px] border-slate-200"
                             />
                         </div>
                         <div className="flex flex-col">
                             <label className="text-[9px] font-bold text-slate-500 uppercase">Buyer's Order No.</label>
-                            <Input 
-                                value={invoice.buyers_order_no || ""} 
-                                onChange={(e) => setInvoice({...invoice, buyers_order_no: e.target.value})}
+                            <Input
+                                value={invoice.buyers_order_no || ""}
+                                onChange={(e) => setInvoice({ ...invoice, buyers_order_no: e.target.value })}
                                 className="h-7 text-[10px] border-slate-200"
                             />
                         </div>
@@ -204,26 +206,26 @@ export default function ClientInvoiceEdit() {
                     <div className="p-2 space-y-2">
                         <div className="flex flex-col">
                             <label className="text-[9px] font-bold text-slate-500 uppercase">Mode/Terms of Payment</label>
-                            <Input 
-                                value={invoice.mode_terms_of_payment || ""} 
-                                onChange={(e) => setInvoice({...invoice, mode_terms_of_payment: e.target.value})}
+                            <Input
+                                value={invoice.mode_terms_of_payment || ""}
+                                onChange={(e) => setInvoice({ ...invoice, mode_terms_of_payment: e.target.value })}
                                 className="h-7 text-[10px] border-slate-200"
                             />
                         </div>
                         <div className="flex flex-col">
                             <label className="text-[9px] font-bold text-slate-500 uppercase">Other References</label>
-                            <Input 
-                                value={invoice.other_references || ""} 
-                                onChange={(e) => setInvoice({...invoice, other_references: e.target.value})}
+                            <Input
+                                value={invoice.other_references || ""}
+                                onChange={(e) => setInvoice({ ...invoice, other_references: e.target.value })}
                                 className="h-7 text-[10px] border-slate-200"
                             />
                         </div>
                         <div className="flex flex-col">
                             <label className="text-[9px] font-bold text-slate-500 uppercase">Dated</label>
-                            <Input 
+                            <Input
                                 type="date"
-                                value={invoice.buyers_order_date || ""} 
-                                onChange={(e) => setInvoice({...invoice, buyers_order_date: e.target.value})}
+                                value={invoice.buyers_order_date || ""}
+                                onChange={(e) => setInvoice({ ...invoice, buyers_order_date: e.target.value })}
                                 className="h-7 text-[10px] border-slate-200"
                             />
                         </div>
@@ -234,17 +236,17 @@ export default function ClientInvoiceEdit() {
                     <div className="border-r border-gray-400 p-2 space-y-2">
                         <div className="flex flex-col">
                             <label className="text-[9px] font-bold text-slate-500 uppercase">Dispatch Doc No.</label>
-                            <Input 
-                                value={invoice.dispatch_doc_no || ""} 
-                                onChange={(e) => setInvoice({...invoice, dispatch_doc_no: e.target.value})}
+                            <Input
+                                value={invoice.dispatch_doc_no || ""}
+                                onChange={(e) => setInvoice({ ...invoice, dispatch_doc_no: e.target.value })}
                                 className="h-7 text-[10px] border-slate-200"
                             />
                         </div>
                         <div className="flex flex-col">
                             <label className="text-[9px] font-bold text-slate-500 uppercase">Dispatched through</label>
-                            <Input 
-                                value={invoice.dispatched_through || ""} 
-                                onChange={(e) => setInvoice({...invoice, dispatched_through: e.target.value})}
+                            <Input
+                                value={invoice.dispatched_through || ""}
+                                onChange={(e) => setInvoice({ ...invoice, dispatched_through: e.target.value })}
                                 className="h-7 text-[10px] border-slate-200"
                             />
                         </div>
@@ -252,18 +254,18 @@ export default function ClientInvoiceEdit() {
                     <div className="p-2 space-y-2">
                         <div className="flex flex-col">
                             <label className="text-[9px] font-bold text-slate-500 uppercase">Delivery Note Date</label>
-                            <Input 
+                            <Input
                                 type="date"
-                                value={invoice.delivery_note_date || ""} 
-                                onChange={(e) => setInvoice({...invoice, delivery_note_date: e.target.value})}
+                                value={invoice.delivery_note_date || ""}
+                                onChange={(e) => setInvoice({ ...invoice, delivery_note_date: e.target.value })}
                                 className="h-7 text-[10px] border-slate-200"
                             />
                         </div>
                         <div className="flex flex-col">
                             <label className="text-[9px] font-bold text-slate-500 uppercase">Destination</label>
-                            <Input 
-                                value={invoice.destination || ""} 
-                                onChange={(e) => setInvoice({...invoice, destination: e.target.value})}
+                            <Input
+                                value={invoice.destination || ""}
+                                onChange={(e) => setInvoice({ ...invoice, destination: e.target.value })}
                                 className="h-7 text-[10px] border-slate-200"
                             />
                         </div>
@@ -273,9 +275,9 @@ export default function ClientInvoiceEdit() {
                 <div className="p-2 border-b border-gray-400">
                     <div className="flex flex-col">
                         <label className="text-[9px] font-bold text-slate-500 uppercase">Terms of Delivery</label>
-                        <Input 
-                            value={invoice.terms_of_delivery || ""} 
-                            onChange={(e) => setInvoice({...invoice, terms_of_delivery: e.target.value})}
+                        <Input
+                            value={invoice.terms_of_delivery || ""}
+                            onChange={(e) => setInvoice({ ...invoice, terms_of_delivery: e.target.value })}
                             className="h-7 text-[10px] border-slate-200"
                         />
                     </div>
@@ -297,26 +299,26 @@ export default function ClientInvoiceEdit() {
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-1">
                                         <label className="text-[9px] font-bold text-slate-500 uppercase">Generated Units</label>
-                                        <Input 
-                                            type="number" 
-                                            value={dMap["Units"]?.amount} 
+                                        <Input
+                                            type="number"
+                                            value={dMap["Units"]?.amount}
                                             onChange={(e) => handleAmountChange("Units", e.target.value)}
                                             className="h-8 text-xs border-slate-300 focus:ring-indigo-500"
                                         />
                                     </div>
                                     <div className="space-y-1">
                                         <label className="text-[9px] font-bold text-slate-500 uppercase">Rate per Unit (₹)</label>
-                                        <Input 
-                                            type="number" 
+                                        <Input
+                                            type="number"
                                             step="0.01"
-                                            value={dMap["Rate"]?.amount} 
+                                            value={dMap["Rate"]?.amount}
                                             onChange={(e) => handleAmountChange("Rate", e.target.value)}
                                             className="h-8 text-xs border-slate-300 focus:ring-indigo-500"
                                         />
                                     </div>
                                 </div>
                                 <p className="mt-3 text-[10px] text-indigo-600 font-medium italic">
-                                    Energy Amount: {units.toLocaleString()} x ₹{rate.toFixed(2)} = ₹{energyAmount.toLocaleString(undefined, {minimumFractionDigits: 2})}
+                                    Energy Amount: {units.toLocaleString()} x ₹{rate.toFixed(2)} = ₹{energyAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                 </p>
                             </td>
                             <td className="p-3 align-bottom text-right font-bold text-indigo-900 text-sm">
@@ -332,10 +334,10 @@ export default function ClientInvoiceEdit() {
                                     <span className="text-slate-400 text-[9px] font-bold">DEDUCTION (-)</span>
                                 </td>
                                 <td className="p-2">
-                                    <Input 
-                                        type="number" 
+                                    <Input
+                                        type="number"
                                         step="0.01"
-                                        value={dMap[key]?.amount} 
+                                        value={dMap[key]?.amount}
                                         onChange={(e) => handleAmountChange(key, e.target.value)}
                                         className="h-8 text-xs border-slate-300 text-right font-semibold text-red-600 focus:ring-red-500"
                                     />
@@ -388,8 +390,8 @@ export default function ClientInvoiceEdit() {
 
             {/* Floating Save FAB (Mobile/Small screens) */}
             <div className="fixed bottom-6 right-6 lg:hidden">
-                <Button 
-                    onClick={handleSave} 
+                <Button
+                    onClick={handleSave}
                     disabled={saving}
                     className="rounded-full h-14 w-14 shadow-2xl bg-indigo-600 hover:bg-indigo-700 text-white p-0"
                 >

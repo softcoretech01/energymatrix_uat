@@ -260,19 +260,21 @@ async def upload_eb_statement(
         # Validate windmill
         validate_windmill(cursor, windmill_id)
 
+        # Get Windmill Number for validation and naming
+        cursor.callproc("masters.sp_get_windmill_number_by_id_or_val", (str(windmill_id),))
+        wm_row = cursor.fetchone()
+        windmill_number = wm_row[0] if wm_row else str(windmill_id)
+        while cursor.nextset(): pass
+
         # Check for duplicate upload (same windmill, month, and year)
         cursor.callproc("windmill.sp_check_eb_statement_duplicate", (windmill_id, month, year))
         existing_record = cursor.fetchone()
         if existing_record:
             raise HTTPException(
                 status_code=409, 
-                detail=f"EB Statement for this windmill already exists for {month} {year}."
+                detail=f"For {windmill_number}, {month} eb statement, is already uploaded."
             )
-
-        # Get Windmill Number for validation and naming
-        cursor.callproc("masters.sp_get_windmill_number_by_id_or_val", (str(windmill_id),))
-        wm_row = cursor.fetchone()
-        windmill_number = wm_row[0] if wm_row else str(windmill_id)
+        while cursor.nextset(): pass
         
         # Normalize month for folder and filename
         month_name = normalize_month(month)
@@ -394,10 +396,11 @@ async def read_eb_statement_metadata(filename: str, user: dict = Depends(get_cur
         parts = filename.split("_")
         windmill_number_from_file = parts[0]
         
-        # Resolve windmill_number for PDF parsing validation
-        cursor.callproc("masters.sp_get_windmill_number_by_id_or_val", (str(windmill_number_from_file),))
-        wm_row = cursor.fetchone()
-        expected_wm_no = wm_row[0] if wm_row else windmill_number_from_file
+        # Resolve windmill_number and name for PDF parsing validation
+        cursor.execute("SELECT windmill_number, windmill_name FROM masters.master_windmill WHERE id = %s OR windmill_number = %s", (windmill_number_from_file, windmill_number_from_file))
+        wm_info = cursor.fetchone()
+        expected_wm_no = wm_info[0] if wm_info else windmill_number_from_file
+        windmill_name = wm_info[1] if wm_info else ""
 
         # 3. Determine file path
         if os.path.isabs(filename):
@@ -435,7 +438,8 @@ async def read_eb_statement_metadata(filename: str, user: dict = Depends(get_cur
         return {
             "status": "success",
             "data": parsed_data,
-            "header_id": header_id
+            "header_id": header_id,
+            "windmill_name": windmill_name
         }
     except Exception as e:
         print(f"Error in read_eb_statement_metadata: {e}")
@@ -531,7 +535,8 @@ async def get_windmills(user: dict = Depends(get_current_user)):
         for row in rows:
             data.append({
                 "id": row[0],
-                "windmill_number": row[1]
+                "windmill_number": row[1],
+                "windmill_name": row[2]
             })
 
         return {

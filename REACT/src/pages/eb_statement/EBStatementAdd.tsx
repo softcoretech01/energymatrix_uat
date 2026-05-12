@@ -23,6 +23,7 @@ import { toast } from "sonner";
 interface Windmill {
     id: number;
     windmill_number: string;
+    windmill_name: string;
 }
 
 export default function EBStatementAdd() {
@@ -157,7 +158,11 @@ export default function EBStatementAdd() {
                 setShowDuplicateDialog(true);
             }
             // Check for mismatch error (wrong month/year)
-            else if (err.response?.status === 400 && message.toLowerCase().includes("selected a wrong")) {
+            else if (err.response?.status === 400 && (
+                message.toLowerCase().includes("selected a wrong") || 
+                message.toLowerCase().includes("mismatch") ||
+                message.toLowerCase().includes("does not match")
+            )) {
                 setMismatchMessage(message);
                 setShowMismatchDialog(true);
             }
@@ -209,7 +214,7 @@ export default function EBStatementAdd() {
                     <div className="space-y-4 px-4 pt-2">
 
                         {/* Windmill + Year + Month */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                             <div className="space-y-1">
                                 <label className="text-xs font-semibold text-slate-600">
                                     Windmill Number
@@ -226,6 +231,15 @@ export default function EBStatementAdd() {
                                         ))}
                                     </SelectContent>
                                 </Select>
+                            </div>
+
+                            <div className="space-y-1">
+                                <label className="text-xs font-semibold text-slate-600">
+                                    Windmill Name
+                                </label>
+                                <div className="h-9 w-full bg-slate-50 border border-slate-300 rounded-md px-3 py-2 text-sm text-slate-700 font-medium overflow-hidden text-ellipsis whitespace-nowrap">
+                                    {windmills.find(w => w.id.toString() === selectedWindmillId)?.windmill_name || "---"}
+                                </div>
                             </div>
 
                             <div className="space-y-1">

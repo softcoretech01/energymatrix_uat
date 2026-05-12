@@ -783,17 +783,15 @@ function EnergyAllotment() {
         setIsEditing(!isEditing);
     };
 
-    // C1↔C2 mutual borrowing; C5 can borrow from C4; C1,C2,C4 cannot borrow from C5.
-    const PARTNER_SLOT: Record<string, string> = { c1: 'c2', c2: 'c1', c5: 'c4' };
+    // C1↔C2 mutual borrowing; C4 can borrow from C5; C5 cannot borrow from C4.
+    const PARTNER_SLOT: Record<string, string> = { c1: 'c2', c2: 'c1', c4: 'c5' };
 
     const canBorrowFrom = (col: string, partner: string): boolean => {
-        // Explicitly block C4 borrowing from C5
-        if (col === 'c4' && partner === 'c5') return false;
-        return !!PARTNER_SLOT[col];
+        return PARTNER_SLOT[col] === partner;
     };
 
     const isPartnered = (col: string): boolean => {
-        return col === 'c1' || col === 'c2' || col === 'c4' || col === 'c5';
+        return !!PARTNER_SLOT[col];
     };
 
     const fetchEbStatementSummary = async () => {
@@ -831,17 +829,9 @@ function EnergyAllotment() {
         const newSummary = JSON.parse(JSON.stringify(originalEbSummary));
         const newBorrows: Record<string, any> = {};
 
-        const cascadePartners: Record<string, string[]> = {
-            c1: ['c2'],
-            c2: ['c1'],
-            c5: ['c4'],
-            c4: [],
-        };
-
         energyAllotmentData.forEach(item => {
             const wm = String(item.wm || '').trim();
             if (!wm || !newSummary[wm]) return;
-
             const cust = String(item.customer || '').trim();
             const se = String(item.seNumber || '').trim();
 
@@ -850,41 +840,40 @@ function EnergyAllotment() {
                 if (val === 0) return;
 
                 const borrowKey = `${cust}|${se}|${wm}|${slot}`;
-                const partners = cascadePartners[slot] ?? [];
+                const partner = PARTNER_SLOT[slot];
+                let remainingToAllot = val;
 
-                // 1. Consume own slot first
+                // Take from own pool first
                 const ownPP = Number(newSummary[wm][`${slot}_pp`]) || 0;
                 const ownBank = Number(newSummary[wm][`${slot}_bank`]) || 0;
 
-                const ownPPConsumed = Math.min(val, ownPP);
-                let deficit = val - ownPPConsumed;
-                const ownBankConsumed = Math.min(deficit, ownBank);
-                deficit -= ownBankConsumed;
+                const takeOwnPP = Math.min(remainingToAllot, ownPP);
+                remainingToAllot -= takeOwnPP;
+                const takeOwnBank = Math.min(remainingToAllot, ownBank);
+                remainingToAllot -= takeOwnBank;
 
-                newSummary[wm][`${slot}_pp`] = ownPP - ownPPConsumed;
-                newSummary[wm][`${slot}_bank`] = ownBank - ownBankConsumed;
+                newSummary[wm][`${slot}_pp`] = ownPP - takeOwnPP;
+                newSummary[wm][`${slot}_bank`] = ownBank - takeOwnBank;
 
-                const slotBorrows: Record<string, { pp: number; bank: number }> = {
-                    _own: { pp: ownPPConsumed, bank: ownBankConsumed }
-                };
+                const slotInfo: any = { _own: { pp: takeOwnPP, bank: takeOwnBank } };
 
-                // 2. Cascade through partners
-                for (const p of partners) {
-                    if (deficit <= 0) break;
-                    const pPP = Number(newSummary[wm][`${p}_pp`]) || 0;
-                    const pBank = Number(newSummary[wm][`${p}_bank`]) || 0;
+                // Take from partner if still remaining
+                if (remainingToAllot > 0 && partner) {
+                    const partPP = Number(newSummary[wm][`${partner}_pp`]) || 0;
+                    const partBank = Number(newSummary[wm][`${partner}_bank`]) || 0;
 
-                    const consumedPP = Math.min(deficit, pPP);
-                    deficit -= consumedPP;
-                    const consumedBank = Math.min(deficit, pBank);
-                    deficit -= consumedBank;
+                    const takePartPP = Math.min(remainingToAllot, partPP);
+                    remainingToAllot -= takePartPP;
+                    const takePartBank = Math.min(remainingToAllot, partBank);
+                    remainingToAllot -= takePartBank;
 
-                    newSummary[wm][`${p}_pp`] = pPP - consumedPP;
-                    newSummary[wm][`${p}_bank`] = pBank - consumedBank;
-                    slotBorrows[p] = { pp: consumedPP, bank: consumedBank };
+                    newSummary[wm][`${partner}_pp`] = partPP - takePartPP;
+                    newSummary[wm][`${partner}_bank`] = partBank - takePartBank;
+
+                    slotInfo[partner] = { pp: takePartPP, bank: takePartBank };
                 }
 
-                newBorrows[borrowKey] = slotBorrows;
+                newBorrows[borrowKey] = slotInfo;
             });
         });
 
@@ -1257,6 +1246,7 @@ function EnergyAllotment() {
                                 let rem = parseFloat(stripCommas(row[slot])) || 0;
                                 const oldPP = parseFloat(row[`${slot}_pp`]) || 0;
                                 const oldBank = parseFloat(row[`${slot}_bank`]) || 0;
+                                const partner = PARTNER_SLOT[slot];
 
                                 // Use own pool first (from fresh server state)
                                 let availOwnPP = (parseFloat(runningBalance[wm]?.[`${slot}_pp`]) || 0) + oldPP;
@@ -1269,17 +1259,16 @@ function EnergyAllotment() {
                                 rem -= useOwnBN;
                                 if (runningBalance[wm]) runningBalance[wm][`${slot}_bank`] = availOwnBN - useOwnBN;
 
-                                // Borrow from partner if needed
+                                // Use partner pool if still remaining
                                 let usePartPP = 0;
                                 let usePartBN = 0;
-                                const partner = PARTNER_SLOT[slot];
-                                if (rem > 0 && partner && canBorrowFrom(slot, partner)) {
-                                    let availPartPP = parseFloat(runningBalance[wm]?.[`${partner}_pp`]) || 0;
+                                if (rem > 0 && partner) {
+                                    let availPartPP = (parseFloat(runningBalance[wm]?.[`${partner}_pp`]) || 0);
                                     usePartPP = Math.min(rem, availPartPP);
                                     rem -= usePartPP;
                                     if (runningBalance[wm]) runningBalance[wm][`${partner}_pp`] = availPartPP - usePartPP;
 
-                                    let availPartBN = parseFloat(runningBalance[wm]?.[`${partner}_bank`]) || 0;
+                                    let availPartBN = (parseFloat(runningBalance[wm]?.[`${partner}_bank`]) || 0);
                                     usePartBN = Math.min(rem, availPartBN);
                                     rem -= usePartBN;
                                     if (runningBalance[wm]) runningBalance[wm][`${partner}_bank`] = availPartBN - usePartBN;
@@ -1889,8 +1878,7 @@ function EnergyAllotment() {
                                             </div>
                                         </div>
                                         <div className="text-[11px] font-bold text-indigo-600 pr-4 flex items-center gap-2">
-                                            <span className="text-slate-400 font-normal">Borrowing:</span>
-                                            C1 <span className="text-indigo-400">{"<--->"}</span> C2 and C4 <span className="text-indigo-400">{"--->"}</span> C5
+                                            {/* Borrowing logic removed */}
                                         </div>
                                     </div>
                                     {/* Top Scrollbar Sync */}
@@ -2087,18 +2075,30 @@ function EnergyAllotment() {
                                                                         return gross / (1 + (lossPercent / 100));
                                                                     };
 
-                                                                    const getBalanceForWM = (netReqStr: any, totalNetAlloc: number, wm: string) => {
-                                                                        const netReq = getNetRequest(netReqStr);
-                                                                        const remainingNet = Math.max(netReq - totalNetAlloc, 0);
-                                                                        const lossPercent = getTransmissionLoss(wm);
-                                                                        const remainingGross = remainingNet * (1 + (lossPercent / 100));
-                                                                        return formatWithCommas(Math.round(remainingGross));
-                                                                    };
-
                                                                     const totalNetAllocC1 = rowItems.reduce((acc, d) => acc + getNetAlloc(d.c1, d.wm), 0);
                                                                     const totalNetAllocC2 = rowItems.reduce((acc, d) => acc + getNetAlloc(d.c2, d.wm), 0);
                                                                     const totalNetAllocC4 = rowItems.reduce((acc, d) => acc + getNetAlloc(d.c4, d.wm), 0);
                                                                     const totalNetAllocC5 = rowItems.reduce((acc, d) => acc + getNetAlloc(d.c5, d.wm), 0);
+
+                                                                    const req1 = getNetRequest(totalConsumptionReq?.c1);
+                                                                    const req2 = getNetRequest(totalConsumptionReq?.c2);
+                                                                    const req4 = getNetRequest(totalConsumptionReq?.c4);
+                                                                    const req5 = getNetRequest(totalConsumptionReq?.c5);
+
+                                                                    const defC1 = Math.max(0, totalNetAllocC1 - req1);
+                                                                    const defC2 = Math.max(0, totalNetAllocC2 - req2);
+                                                                    const defC4 = Math.max(0, totalNetAllocC4 - req4);
+                                                                    // const defC5 = Math.max(0, totalNetAllocC5 - req5); // C5 cannot be borrowed from by C4? No, C4 borrows from C5.
+
+                                                                    const adjNetC1 = Math.max(0, req1 - totalNetAllocC1 - defC2);
+                                                                    const adjNetC2 = Math.max(0, req2 - totalNetAllocC2 - defC1);
+                                                                    const adjNetC4 = Math.max(0, req4 - totalNetAllocC4); // C4 balance just reflects its own cap
+                                                                    const adjNetC5 = Math.max(0, req5 - totalNetAllocC5 - defC4); // C5 balance reduced if C4 borrowed
+
+                                                                    const getRemainingGross = (remNet: number, wm: string) => {
+                                                                        const lossPercent = getTransmissionLoss(wm);
+                                                                        return formatWithCommas(Math.round(remNet * (1 + (lossPercent / 100))));
+                                                                    };
 
                                                                     const firstGen = generators[0] || "";
                                                                     const grossTotal = getGrossRequest(totalConsumptionReq?.total || 0, firstGen);
@@ -2146,16 +2146,16 @@ function EnergyAllotment() {
                                                                                     return (
                                                                                         <React.Fragment key={wm}>
                                                                                             <TableCell className="p-1 border-r text-center">
-                                                                                                <Input disabled className="h-7 text-center text-xs px-0" value={formatWithCommas(reqC1)} title={`Base: ${totalConsumptionReq?.c1 || 0} + Loss: ${reqC1 - (parseFloat(stripCommas(totalConsumptionReq?.c1 || '0')) || 0)}`} />
+                                                                                                <Input disabled className="h-7 text-center text-xs px-0" value={formatWithCommas(reqC1)} title={`Base: ${totalConsumptionReq?.c1 || 0} + Loss: ${(reqC1 - (parseFloat(stripCommas(totalConsumptionReq?.c1 || '0')) || 0)).toFixed(4)}`} />
                                                                                             </TableCell>
                                                                                             <TableCell className="p-1 border-r text-center">
-                                                                                                <Input disabled className="h-7 text-center text-xs px-0" value={formatWithCommas(reqC2)} title={`Base: ${totalConsumptionReq?.c2 || 0} + Loss: ${reqC2 - (parseFloat(stripCommas(totalConsumptionReq?.c2 || '0')) || 0)}`} />
+                                                                                                <Input disabled className="h-7 text-center text-xs px-0" value={formatWithCommas(reqC2)} title={`Base: ${totalConsumptionReq?.c2 || 0} + Loss: ${(reqC2 - (parseFloat(stripCommas(totalConsumptionReq?.c2 || '0')) || 0)).toFixed(4)}`} />
                                                                                             </TableCell>
                                                                                             <TableCell className="p-1 border-r text-center">
-                                                                                                <Input disabled className="h-7 text-center text-xs px-0" value={formatWithCommas(reqC4)} title={`Base: ${totalConsumptionReq?.c4 || 0} + Loss: ${reqC4 - (parseFloat(stripCommas(totalConsumptionReq?.c4 || '0')) || 0)}`} />
+                                                                                                <Input disabled className="h-7 text-center text-xs px-0" value={formatWithCommas(reqC4)} title={`Base: ${totalConsumptionReq?.c4 || 0} + Loss: ${(reqC4 - (parseFloat(stripCommas(totalConsumptionReq?.c4 || '0')) || 0)).toFixed(4)}`} />
                                                                                             </TableCell>
                                                                                             <TableCell className="p-1 border-r text-center">
-                                                                                                <Input disabled className="h-7 text-center text-xs px-0" value={formatWithCommas(reqC5)} title={`Base: ${totalConsumptionReq?.c5 || 0} + Loss: ${reqC5 - (parseFloat(stripCommas(totalConsumptionReq?.c5 || '0')) || 0)}`} />
+                                                                                                <Input disabled className="h-7 text-center text-xs px-0" value={formatWithCommas(reqC5)} title={`Base: ${totalConsumptionReq?.c5 || 0} + Loss: ${(reqC5 - (parseFloat(stripCommas(totalConsumptionReq?.c5 || '0')) || 0)).toFixed(4)}`} />
                                                                                             </TableCell>
                                                                                         </React.Fragment>
                                                                                     );
@@ -2222,10 +2222,10 @@ function EnergyAllotment() {
                                                                                     Balance Allocation
                                                                                 </TableCell>
                                                                                 {generators.map(wm => {
-                                                                                    const curBalC1 = getBalanceForWM(totalConsumptionReq?.c1, totalNetAllocC1, wm);
-                                                                                    const curBalC2 = getBalanceForWM(totalConsumptionReq?.c2, totalNetAllocC2, wm);
-                                                                                    const curBalC4 = getBalanceForWM(totalConsumptionReq?.c4, totalNetAllocC4, wm);
-                                                                                    const curBalC5 = getBalanceForWM(totalConsumptionReq?.c5, totalNetAllocC5, wm);
+                                                                                    const curBalC1 = getRemainingGross(adjNetC1, wm);
+                                                                                    const curBalC2 = getRemainingGross(adjNetC2, wm);
+                                                                                    const curBalC4 = getRemainingGross(adjNetC4, wm);
+                                                                                    const curBalC5 = getRemainingGross(adjNetC5, wm);
                                                                                     return (
                                                                                         <React.Fragment key={wm}>
                                                                                             <TableCell className="p-1 border-r text-center">
@@ -2246,10 +2246,10 @@ function EnergyAllotment() {
                                                                                 <TableCell className="p-1 border-r text-center align-middle bg-green-50 font-bold text-green-700 text-xs py-2">
                                                                                     {(() => {
                                                                                         const firstGen = generators[0] || "";
-                                                                                        const b1 = parseFloat(stripCommas(getBalanceForWM(totalConsumptionReq?.c1, totalNetAllocC1, firstGen))) || 0;
-                                                                                        const b2 = parseFloat(stripCommas(getBalanceForWM(totalConsumptionReq?.c2, totalNetAllocC2, firstGen))) || 0;
-                                                                                        const b4 = parseFloat(stripCommas(getBalanceForWM(totalConsumptionReq?.c4, totalNetAllocC4, firstGen))) || 0;
-                                                                                        const b5 = parseFloat(stripCommas(getBalanceForWM(totalConsumptionReq?.c5, totalNetAllocC5, firstGen))) || 0;
+                                                                                        const b1 = parseFloat(stripCommas(getRemainingGross(adjNetC1, firstGen))) || 0;
+                                                                                        const b2 = parseFloat(stripCommas(getRemainingGross(adjNetC2, firstGen))) || 0;
+                                                                                        const b4 = parseFloat(stripCommas(getRemainingGross(adjNetC4, firstGen))) || 0;
+                                                                                        const b5 = parseFloat(stripCommas(getRemainingGross(adjNetC5, firstGen))) || 0;
                                                                                         return formatWithCommas(Math.round(b1 + b2 + b4 + b5));
                                                                                     })()}
                                                                                 </TableCell>
@@ -2265,7 +2265,7 @@ function EnergyAllotment() {
                                                                                     const getUP = (col: string) => {
                                                                                         const borrowKey = `${customer}|${seNumber}|${trimmedWM}|${col}`;
                                                                                         const slotBorrow = borrowedAmounts[borrowKey];
-                                                                                        let up = 0;
+                                                                                                                                                                                let up = 0;
                                                                                         if (slotBorrow) {
                                                                                             up += slotBorrow._own?.pp || 0;
                                                                                             Object.keys(slotBorrow).forEach(k => {
@@ -2273,7 +2273,7 @@ function EnergyAllotment() {
                                                                                             });
                                                                                         }
                                                                                         return Math.round(up);
-                                                                                    };
+                                                    };
                                                                                     return (
                                                                                         <React.Fragment key={wm}>
                                                                                             <TableCell className="p-1 border-r text-center text-[#B22222] font-semibold text-xs">{formatWithCommas(getUP('c1'))}</TableCell>
@@ -2315,7 +2315,7 @@ function EnergyAllotment() {
                                                                                         const borrowKey = `${customer}|${seNumber}|${trimmedWM}|${col}`;
                                                                                         const slotBorrow = borrowedAmounts[borrowKey];
                                                                                         if (!slotBorrow) return '-';
-                                                                                        let ub = 0;
+                                                                                                                                                                                let ub = 0;
                                                                                         ub += slotBorrow._own?.bank || 0;
                                                                                         Object.keys(slotBorrow).forEach(k => {
                                                                                             if (k !== '_own') ub += slotBorrow[k]?.bank || 0;

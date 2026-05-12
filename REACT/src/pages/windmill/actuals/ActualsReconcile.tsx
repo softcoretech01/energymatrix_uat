@@ -93,6 +93,7 @@ export default function ActualsReconcile() {
                                 <thead className="bg-sidebar text-white">
                                     <tr>
                                         <th className="px-6 py-4 font-semibold tracking-wide uppercase text-[11px]">Windmill</th>
+                                        <th className="px-6 py-4 font-semibold tracking-wide uppercase text-[11px]">Windmill Name</th>
                                         <th className="px-6 py-4 font-semibold tracking-wide uppercase text-[11px] text-right">System Calculated Units (₹)</th>
                                         <th className="px-6 py-4 font-semibold tracking-wide uppercase text-[11px] text-right">Adjusted Report Units(₹)</th>
                                         <th className="px-6 py-4 font-semibold tracking-wide uppercase text-[11px] text-center">Difference (₹)</th>
@@ -101,7 +102,7 @@ export default function ActualsReconcile() {
                                 <tbody className="divide-y divide-slate-100">
                                     {reconcileDetails.details.length === 0 ? (
                                         <tr>
-                                            <td colSpan={4} className="text-center py-12 text-slate-500 font-medium">
+                                            <td colSpan={5} className="text-center py-12 text-slate-500 font-medium">
                                                 No windmill charges mapped for this customer.
                                             </td>
                                         </tr>
@@ -116,6 +117,7 @@ export default function ActualsReconcile() {
                                                         </span>
                                                     )}
                                                 </td>
+                                                <td className="px-6 py-4 text-slate-600 font-medium">{item.windmill_name}</td>
                                                 <td
                                                     className="px-6 py-4 text-right tabular-nums font-medium cursor-help"
                                                     title={item.system_wheeling_charge > 0 && item.original_wheeling_charges > 0
@@ -129,9 +131,17 @@ export default function ActualsReconcile() {
                                                     {Number(item.manual_adjusted_total).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                 </td>
                                                 <td className="px-6 py-4 text-center tabular-nums font-bold">
-                                                    <span className={Math.abs(item.system_wheeling_charge - item.manual_adjusted_total) < 0.0001 ? "text-emerald-600" : "text-rose-600"}>
-                                                        {Number(item.system_wheeling_charge - item.manual_adjusted_total).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                                    </span>
+                                                    {(() => {
+                                                        const diff = item.system_wheeling_charge - item.manual_adjusted_total;
+                                                        let colorClass = "text-emerald-600"; // 0
+                                                        if (diff < -0.0001) colorClass = "text-blue-600";
+                                                        else if (diff > 0.0001) colorClass = "text-rose-600";
+                                                        return (
+                                                            <span className={colorClass}>
+                                                                {Number(diff).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                            </span>
+                                                        );
+                                                    })()}
                                                 </td>
                                             </tr>
                                         ))
@@ -140,15 +150,25 @@ export default function ActualsReconcile() {
                                     {/* Totals Row */}
                                     {reconcileDetails.details.length > 0 && (
                                         <tr className="bg-slate-50 font-bold border-t-2 border-slate-200">
-                                            <td className="px-6 py-4 text-slate-900 border-r border-slate-200">Total</td>
+                                            <td colSpan={2} className="px-6 py-4 text-slate-900 border-r border-slate-200">Total</td>
                                             <td className="px-6 py-4 text-right text-slate-900 tabular-nums text-base">
                                                 {Number(reconcileDetails.details.reduce((sum: number, i: any) => sum + i.system_wheeling_charge, 0)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                             </td>
                                             <td className="px-6 py-4 text-right text-slate-900 tabular-nums text-base">
                                                 {Number(reconcileDetails.details.reduce((sum: number, i: any) => sum + i.manual_adjusted_total, 0)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                             </td>
-                                            <td className="px-6 py-4 text-center text-slate-900 tabular-nums font-bold">
-                                                {Number(reconcileDetails.details.reduce((sum: number, i: any) => sum + (i.system_wheeling_charge - i.manual_adjusted_total), 0)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            <td className="px-6 py-4 text-center tabular-nums font-bold">
+                                                {(() => {
+                                                    const totalDiff = reconcileDetails.details.reduce((sum: number, i: any) => sum + (i.system_wheeling_charge - i.manual_adjusted_total), 0);
+                                                    let colorClass = "text-emerald-600";
+                                                    if (totalDiff < -0.0001) colorClass = "text-blue-600";
+                                                    else if (totalDiff > 0.0001) colorClass = "text-rose-600";
+                                                    return (
+                                                        <span className={colorClass}>
+                                                            {Number(totalDiff).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                        </span>
+                                                    );
+                                                })()}
                                             </td>
                                         </tr>
                                     )}

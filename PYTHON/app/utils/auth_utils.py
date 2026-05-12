@@ -10,10 +10,11 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60
 security = HTTPBearer()
 
 
-def create_access_token(user_id: int, username: str):
+def create_access_token(user_id: int, username: str, role_id: int):
     payload = {
         "id": user_id,
         "username": username,
+        "role_id": role_id,
         "exp": datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     }
 
@@ -31,7 +32,8 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
 
         user = {
             "id": payload["id"],
-            "username": payload["username"]
+            "username": payload["username"],
+            "role_id": payload.get("role_id")
         }
 
         return user

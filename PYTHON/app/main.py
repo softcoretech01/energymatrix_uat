@@ -29,6 +29,10 @@ from app.routers.charge_values_router import router as charge_values_router
 from app.routers.charge_values_solar_router import router as charge_values_solar_router
 from app.routers.client_invoice_router import router as client_invoice_router
 from app.routers.energy_allotment_router import router as energy_allotment_router
+from app.routers.audit_router import router as audit_router
+from app.routers.error_log_router import router as error_log_router
+from app.routers.session_router import router as session_router
+from app.routers.login_log_router import router as login_log_router
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("Running database initialization on startup...")
@@ -50,11 +54,50 @@ app.add_middleware(
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
     import traceback
+    from app.utils.logger import log_error
     error_details = traceback.format_exc()
     print(f"GLOBAL ERROR: {error_details}")
+    
+    # Log to database
+    try:
+        log_error(
+            module_name="Backend",
+            error_message=str(exc),
+            error_stack=error_details,
+            endpoint=str(request.url),
+            method=request.method,
+            page_name=request.url.path,
+            ip_address=request.client.host if request.client else None
+        )
+    except Exception as log_err:
+        print(f"Failed to log global error to DB: {log_err}")
+
     return JSONResponse(
         status_code=500,
         content={"message": "Internal Server Error", "detail": str(exc), "traceback": error_details},
+    )
+
+from fastapi import HTTPException
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request, exc):
+    # Log only server errors (500+)
+    if exc.status_code >= 500:
+        from app.utils.logger import log_error
+        try:
+            log_error(
+                module_name="Backend-API",
+                error_message=str(exc.detail),
+                endpoint=str(request.url),
+                method=request.method,
+                page_name=request.url.path,
+                ip_address=request.client.host if request.client else None
+            )
+        except:
+            pass
+            
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"message": exc.detail}
     )
 # Serve uploaded files
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
@@ -84,3 +127,9 @@ app.include_router(charge_values_router, prefix="/api", dependencies=auth_dep)
 app.include_router(charge_values_solar_router, prefix="/api", dependencies=auth_dep)
 app.include_router(client_invoice_router, prefix="/api", dependencies=auth_dep)
 app.include_router(energy_allotment_router, prefix="/api", dependencies=auth_dep)
+app.include_router(audit_router, prefix="/api", dependencies=auth_dep)
+app.include_router(error_log_router, prefix="/api")
+app.include_router(session_router, prefix="/api", dependencies=auth_dep)
+app.include_router(login_log_router, prefix="/api", dependencies=auth_dep)
+
+
