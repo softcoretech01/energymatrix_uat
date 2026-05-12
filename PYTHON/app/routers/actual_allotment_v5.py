@@ -231,7 +231,7 @@ async def get_actual_allotment_list(
     cursor = conn.cursor(pymysql.cursors.DictCursor)
     try:
         # 1. Query combined reconciliation list via SP
-        cursor.callproc("windmill.sp_get_actual_reconciliation_list", (year, month))
+        cursor.callproc("sp_get_actual_reconciliation_list", (year, month))
         rows = cursor.fetchall()
         while cursor.nextset(): pass
 

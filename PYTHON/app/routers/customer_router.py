@@ -134,7 +134,7 @@ async def get_customers_for_allotment(user: dict = Depends(get_current_user)):
         conn = get_connection()
         cursor = conn.cursor(pymysql.cursors.DictCursor)
 
-        cursor.callproc("masters.sp_get_customers_for_energy_allotment")
+        cursor.callproc("sp_get_customers_for_energy_allotment")
         rows = cursor.fetchall()
         return rows
 

@@ -95,7 +95,7 @@ async def upload_eb_statement_solar(
     try:
         solar_num = get_solar_number(cursor, solar_id)
         
-        cursor.callproc("solar.sp_check_eb_solar_duplicate", (solar_id, month_name, final_year))
+        cursor.callproc("sp_check_eb_solar_duplicate", (solar_id, month_name, final_year))
         existing_record = cursor.fetchone()
         if existing_record:
             raise HTTPException(
@@ -135,7 +135,7 @@ async def upload_eb_statement_solar(
     cursor = conn.cursor()
     try:
         cursor.callproc(
-            "solar.sp_create_eb_solar_header",
+            "sp_create_eb_solar_header",
             (int(solar_id) if solar_id and str(solar_id).isdigit() else solar_id, month_name, year, file_path, 1)
         )
         conn.commit()
@@ -144,7 +144,7 @@ async def upload_eb_statement_solar(
         
         if header_id:
             try:
-                cursor.callproc("solar.sp_update_eb_solar_year", (header_id, year))
+                cursor.callproc("sp_update_eb_solar_year", (header_id, year))
                 conn.commit()
             except Exception as year_update_exc:
                 print("Failed to update year on EB solar upload:", year_update_exc)
@@ -173,7 +173,7 @@ async def upload_eb_statement_solar(
             try:
                 conn = get_connection(db_name="solar")
                 cur = conn.cursor()
-                cur.callproc("solar.sp_delete_eb_solar_header", (header_id,))
+                cur.callproc("sp_delete_eb_solar_header", (header_id,))
                 conn.commit()
                 cur.close()
                 conn.close()
@@ -193,11 +193,11 @@ async def upload_eb_statement_solar(
 @router.get("/windmills")
 async def get_solar_windmill_numbers():
     """Return available solar windmill numbers from masters.master_windmill (posted only)."""
-    conn = get_connection(db_name=DB_NAME_WINDMILL)
+    conn = get_connection(db_name="masters")
     cursor = conn.cursor()
 
     try:
-        cursor.callproc("masters.sp_get_solar_windmill_dropdown")
+        cursor.callproc("sp_get_solar_windmill_dropdown")
         rows = cursor.fetchall()
         data = [
             {"id": row[0], "solar_number": row[1], "windmill_name": row[2]}

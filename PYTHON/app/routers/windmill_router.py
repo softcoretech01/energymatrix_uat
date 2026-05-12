@@ -99,7 +99,7 @@ async def create_windmill(data: WindmillCreate, user: dict = Depends(get_current
 
         conn.commit()
 
-        cursor.callproc("masters.sp_get_last_insert_id")
+        cursor.callproc("sp_get_last_insert_id")
         result = cursor.fetchone()
         new_id = result.get("id") if result else None
 
@@ -148,7 +148,7 @@ async def get_active_posted_windmills(user: dict = Depends(get_current_user)):
 
         # Select windmills that are marked 'Active' and have been 'Posted' (is_submitted = 1)
         # This is specifically used by the Energy Allotment module for dynamic header generation.
-        cursor.callproc("masters.sp_get_active_posted_windmills")
+        cursor.callproc("sp_get_active_posted_windmills")
         result = cursor.fetchall()
         return result
 

@@ -59,7 +59,7 @@ async def generate_invoice(data: dict, user: dict = Depends(get_current_user)):
         invoice_id = result["id"] if result else None
         if invoice_id:
             # Step 1: Fetch invoice metadata
-            cursor.callproc("windmill.sp_get_client_invoice_metadata", (invoice_id,))
+            cursor.callproc("sp_get_client_invoice_metadata", (invoice_id,))
             invoice = cursor.fetchone()
             while cursor.nextset(): pass
             
@@ -71,7 +71,7 @@ async def generate_invoice(data: dict, user: dict = Depends(get_current_user)):
                 m_int = month_map.get(invoice.get("month", ""), 0)
 
                 # Step 2: Fetch actual updated units and tax via SP
-                cursor.callproc("windmill.sp_get_actual_units_total", (
+                cursor.callproc("sp_get_actual_units_total", (
                     invoice.get("customer_id"), 
                     invoice.get("service_id"), 
                     invoice.get("year"), 
@@ -82,7 +82,7 @@ async def generate_invoice(data: dict, user: dict = Depends(get_current_user)):
                 while cursor.nextset(): pass
 
                 # Fetch tax via SP
-                cursor.callproc("windmill.sp_get_actual_tax_total", (
+                cursor.callproc("sp_get_actual_tax_total", (
                     invoice.get("customer_id"), 
                     invoice.get("service_id"), 
                     invoice.get("year"), 
@@ -141,10 +141,10 @@ async def generate_invoice(data: dict, user: dict = Depends(get_current_user)):
                 d_map["Total"] = {"amount": total_charges, "calc": f"Sum of all above charges = {total_charges:,.2f}"}
 
                 for field_name, val in d_map.items():
-                    cursor.callproc("windmill.sp_upsert_client_invoice_detail", (invoice_id, field_name, val["amount"], val["calc"]))
+                    cursor.callproc("sp_upsert_client_invoice_detail", (invoice_id, field_name, val["amount"], val["calc"]))
                 
                 # Update main invoice amount
-                cursor.callproc("windmill.sp_update_client_invoice_amount", (invoice_id, final_amount))
+                cursor.callproc("sp_update_client_invoice_amount", (invoice_id, final_amount))
                 
                 conn.commit()
 
@@ -243,7 +243,7 @@ async def get_invoice_print_data(
         m_int = month_map.get(row_copy.get("month", ""), 0)
 
         # 1. Fetch latest units via SP
-        cursor.callproc("windmill.sp_get_actual_units_total", (
+        cursor.callproc("sp_get_actual_units_total", (
             row_copy.get("customer_id"), 
             row_copy.get("service_id"), 
             row_copy.get("year"), 
@@ -260,7 +260,7 @@ async def get_invoice_print_data(
             row_copy["details"].append({"field_name": "Units", "amount": latest_units})
 
         # 2. Fetch latest tax
-        cursor.callproc("windmill.sp_get_actual_tax_total", (
+        cursor.callproc("sp_get_actual_tax_total", (
             row_copy.get("customer_id"), 
             row_copy.get("service_id"), 
             row_copy.get("year"), 
@@ -284,7 +284,7 @@ async def get_invoice_print_data(
             row_copy["details"].append({"field_name": "Self Generation Tax", "amount": actual_tax})
 
         # 3. Fetch latest wheeling via SP
-        cursor.callproc("windmill.sp_get_eb_wheeling_total", (
+        cursor.callproc("sp_get_eb_wheeling_total", (
             row_copy.get("customer_id"), 
             row_copy.get("service_id"), 
             row_copy.get("year"), 
@@ -345,13 +345,13 @@ async def get_invoice_details(invoice_id: int, user: dict = Depends(get_current_
         conn = get_connection(db_name="windmill")
         cursor = conn.cursor(pymysql.cursors.DictCursor)
         # Fetch stored details
-        cursor.callproc("windmill.sp_get_client_invoice_details", (invoice_id,))
+        cursor.callproc("sp_get_client_invoice_details", (invoice_id,))
         rows = cursor.fetchall()
         while cursor.nextset(): pass
         
         # If no details exist (for old invoices), populate them
         if not rows:
-            cursor.callproc("windmill.sp_get_client_invoice_metadata", (invoice_id,))
+            cursor.callproc("sp_get_client_invoice_metadata", (invoice_id,))
             invoice = cursor.fetchone()
             while cursor.nextset(): pass
             
@@ -363,7 +363,7 @@ async def get_invoice_details(invoice_id: int, user: dict = Depends(get_current_
                 m_int = month_map.get(invoice.get("month", ""), 0)
                 
                 # Step 2: Fetch actual updated units and tax via SP
-                cursor.callproc("windmill.sp_get_actual_units_total", (
+                cursor.callproc("sp_get_actual_units_total", (
                     invoice.get("customer_id"), 
                     invoice.get("service_id"), 
                     invoice.get("year"), 
@@ -374,7 +374,7 @@ async def get_invoice_details(invoice_id: int, user: dict = Depends(get_current_
                 while cursor.nextset(): pass
 
                 # Fetch tax via SP
-                cursor.callproc("windmill.sp_get_actual_tax_total", (
+                cursor.callproc("sp_get_actual_tax_total", (
                     invoice.get("customer_id"), 
                     invoice.get("service_id"), 
                     invoice.get("year"), 
@@ -425,14 +425,14 @@ async def get_invoice_details(invoice_id: int, user: dict = Depends(get_current_
                 d_map["Total"] = {"amount": total_charges, "calc": f"Sum of all above charges = {total_charges:,.2f}"}
 
                 for field_name, val in d_map.items():
-                    cursor.callproc("windmill.sp_upsert_client_invoice_detail", (invoice_id, field_name, val["amount"], val["calc"]))
+                    cursor.callproc("sp_upsert_client_invoice_detail", (invoice_id, field_name, val["amount"], val["calc"]))
                 
                 # Update main invoice amount
-                cursor.callproc("windmill.sp_update_client_invoice_amount", (invoice_id, final_amount))
+                cursor.callproc("sp_update_client_invoice_amount", (invoice_id, final_amount))
                 
                 conn.commit()
                 # Refresh rows via SP
-                cursor.callproc("windmill.sp_get_client_invoice_details", (invoice_id,))
+                cursor.callproc("sp_get_client_invoice_details", (invoice_id,))
                 rows = cursor.fetchall()
                 while cursor.nextset(): pass
         
@@ -440,7 +440,7 @@ async def get_invoice_details(invoice_id: int, user: dict = Depends(get_current_
         tax_entry = next((r for r in rows if r["field_name"] == "Self Generation Tax"), None)
         if not tax_entry or float(tax_entry["amount"]) == 0:
              # Logic to re-calculate tax for existing rows via metadata SP
-             cursor.callproc("windmill.sp_get_client_invoice_metadata", (invoice_id,))
+             cursor.callproc("sp_get_client_invoice_metadata", (invoice_id,))
              inv_info = cursor.fetchone()
              while cursor.nextset(): pass
 
@@ -451,7 +451,7 @@ async def get_invoice_details(invoice_id: int, user: dict = Depends(get_current_
                 }
                 m_int = month_map.get(inv_info.get("month", ""), 0)
                 
-                cursor.callproc("windmill.sp_get_actual_tax_total", (
+                cursor.callproc("sp_get_actual_tax_total", (
                     inv_info.get("customer_id"), 
                     inv_info.get("service_id"), 
                     inv_info.get("year"), 
@@ -468,10 +468,10 @@ async def get_invoice_details(invoice_id: int, user: dict = Depends(get_current_
                     if is_lt:
                         actual_tax = 0.0
 
-                    cursor.callproc("windmill.sp_upsert_client_invoice_detail", (invoice_id, "Self Generation Tax", actual_tax, f"Re-calculated = {actual_tax:,.2f}"))
+                    cursor.callproc("sp_upsert_client_invoice_detail", (invoice_id, "Self Generation Tax", actual_tax, f"Re-calculated = {actual_tax:,.2f}"))
                     conn.commit()
                     # Refresh rows again
-                    cursor.callproc("windmill.sp_get_client_invoice_details", (invoice_id,))
+                    cursor.callproc("sp_get_client_invoice_details", (invoice_id,))
                     rows = cursor.fetchall()
                     while cursor.nextset(): pass
 
@@ -498,7 +498,7 @@ async def update_invoice_details(invoice_id: int, data: dict, user: dict = Depen
         
         # 1. Update details table via SP
         for item in details:
-            cursor.callproc("windmill.sp_upsert_client_invoice_detail", (invoice_id, item["field_name"], item["amount"], item.get("calculation")))
+            cursor.callproc("sp_upsert_client_invoice_detail", (invoice_id, item["field_name"], item["amount"], item.get("calculation")))
             
         # 2. Recalculate total amount for the main invoice table
         # Formula: Amount = Net Units - Total
@@ -530,10 +530,10 @@ async def update_invoice_details(invoice_id: int, data: dict, user: dict = Depen
                 cursor.execute(f"UPDATE client_invoice SET {field} = %s WHERE id = %s", (val, invoice_id))
 
         # Update Total charge detail
-        cursor.callproc("windmill.sp_upsert_client_invoice_detail", (invoice_id, "Total", total_charges, f"Sum of all updated charges = {total_charges:,.2f}"))
+        cursor.callproc("sp_upsert_client_invoice_detail", (invoice_id, "Total", total_charges, f"Sum of all updated charges = {total_charges:,.2f}"))
 
         # Update final amount via SP
-        cursor.callproc("windmill.sp_update_client_invoice_amount", (invoice_id, final_amount))
+        cursor.callproc("sp_update_client_invoice_amount", (invoice_id, final_amount))
 
         conn.commit()
         return {"status": "success", "final_amount": final_amount, "total_charges": total_charges}
