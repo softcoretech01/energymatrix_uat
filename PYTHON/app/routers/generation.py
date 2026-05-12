@@ -218,8 +218,7 @@ def get_windmill_list(user: dict = Depends(get_current_user)):
             # Stored proc may not exist (1305) or has another issue.
             # Fall back to a direct query against master_windmill.
             if getattr(e, "args", None) and len(e.args) > 0 and e.args[0] == 1305:
-                # Direct query fallback if SP is truly missing
-                cursor.execute("SELECT id, windmill_number FROM master_windmill WHERE is_submitted = 1 AND (status = '1' OR status = 'Active' OR status = 'active')")
+                cursor.callproc("sp_get_windmill_list_dropdown_for_gen")
                 rows = cursor.fetchall()
             else:
                 raise

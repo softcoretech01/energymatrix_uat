@@ -260,11 +260,16 @@ async def upload_eb_statement(
         # Validate windmill
         validate_windmill(cursor, windmill_id)
 
-        # Get Windmill Number for validation and naming
-        cursor.callproc("masters.sp_get_windmill_number_by_id_or_val", (str(windmill_id),))
-        wm_row = cursor.fetchone()
-        windmill_number = wm_row[0] if wm_row else str(windmill_id)
-        while cursor.nextset(): pass
+        # Get Windmill Number for validation and naming using masters connection
+        conn_m = get_connection(db_name="masters")
+        cursor_m = conn_m.cursor()
+        try:
+            cursor_m.callproc("sp_get_windmill_number_by_id_or_val", (str(windmill_id),))
+            wm_row = cursor_m.fetchone()
+            windmill_number = wm_row[0] if wm_row else str(windmill_id)
+        finally:
+            cursor_m.close()
+            conn_m.close()
 
         # Check for duplicate upload (same windmill, month, and year)
         cursor.callproc("sp_check_eb_statement_duplicate", (windmill_id, month, year))
@@ -494,10 +499,17 @@ async def get_eb_statement_details(header_id: int, user: dict = Depends(get_curr
         if info:
             # windmill_id, month_name, year
             w_id, m_name, y_val = info[0], info[1], info[2]
-            cursor.callproc("masters.sp_get_windmill_number_by_id_or_val", (str(w_id),))
-            wm_num_row = cursor.fetchone()
-            while cursor.nextset(): pass
-            wm_num = wm_num_row[0] if wm_num_row else str(w_id)
+            
+            conn_m = get_connection(db_name="masters")
+            cursor_m = conn_m.cursor()
+            try:
+                cursor_m.callproc("sp_get_windmill_number_by_id_or_val", (str(w_id),))
+                wm_num_row = cursor_m.fetchone()
+                wm_num = wm_num_row[0] if wm_num_row else str(w_id)
+            finally:
+                cursor_m.close()
+                conn_m.close()
+                
             system_net = get_system_net(cursor, wm_num, m_name, y_val)
 
         return {
@@ -736,33 +748,39 @@ async def save_eb_statement_details(
 
             # 1) Preferred: Match using the charge description (charge_description column)
             if charge_name_norm:
+                conn_m = get_connection(db_name="masters")
+                cursor_m = conn_m.cursor()
                 try:
-                    cursor.callproc("masters.sp_mapping_charge_id", (charge_name_norm, ""))
-                    res = cursor.fetchone()
-                    if res:
-                        charge_id = res[0]
-                except Exception as ce:
-                    print(f"Warning: Could not map charge description '{charge.name}': {ce}")
+                    try:
+                        cursor_m.callproc("sp_mapping_charge_id", (charge_name_norm, ""))
+                        res = cursor_m.fetchone()
+                        if res:
+                            charge_id = res[0]
+                    except Exception as ce:
+                        print(f"Warning: Could not map charge description '{charge.name}': {ce}")
 
-            # 2) Secondary: use code lookup if provided
-            if not charge_id and charge_code_norm:
-                try:
-                    cursor.callproc("masters.sp_mapping_charge_id_by_code", (charge_code_norm,))
-                    res = cursor.fetchone()
-                    if res:
-                        charge_id = res[0]
-                except Exception as ce:
-                    print(f"Warning: Could not map charge code '{charge.code}': {ce}")
+                    # 2) Secondary: use code lookup if provided
+                    if not charge_id and charge_code_norm:
+                        try:
+                            cursor_m.callproc("sp_mapping_charge_id_by_code", (charge_code_norm,))
+                            res = cursor_m.fetchone()
+                            if res:
+                                charge_id = res[0]
+                        except Exception as ce:
+                            print(f"Warning: Could not map charge code '{charge.code}': {ce}")
 
-            # 3) Fallback: match on charge name if still missing
-            if not charge_id:
-                try:
-                    cursor.callproc("masters.sp_mapping_charge_id_fallback", (charge_name_norm,))
-                    res = cursor.fetchone()
-                    if res:
-                        charge_id = res[0]
-                except Exception as ce:
-                    print(f"Warning: Could not map charge '{charge.name}': {ce}")
+                    # 3) Fallback: match on charge name if still missing
+                    if not charge_id:
+                        try:
+                            cursor_m.callproc("sp_mapping_charge_id_fallback", (charge_name_norm,))
+                            res = cursor_m.fetchone()
+                            if res:
+                                charge_id = res[0]
+                        except Exception as ce:
+                            print(f"Warning: Could not map charge '{charge.name}': {ce}")
+                finally:
+                    cursor_m.close()
+                    conn_m.close()
 
             if charge_id is None:
                 print(f"Warning: charge_id not mapped for '{charge.name}' (code={getattr(charge, 'code', None)})")

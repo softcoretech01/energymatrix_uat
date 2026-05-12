@@ -37,12 +37,18 @@ def normalize_month(month_val):
 def get_solar_number(cursor, solar_id):
     if not solar_id:
         return "solar"
+    # Create a separate connection for masters lookup to avoid cross-db prefix issues in production
+    conn_m = get_connection(db_name="masters")
+    cursor_m = conn_m.cursor()
     try:
-        cursor.callproc("masters.sp_get_windmill_number_by_id_or_val", (str(solar_id),))
-        row = cursor.fetchone()
+        cursor_m.callproc("sp_get_windmill_number_by_id_or_val", (str(solar_id),))
+        row = cursor_m.fetchone()
         return row[0] if row else str(solar_id)
     except Exception:
         return str(solar_id)
+    finally:
+        cursor_m.close()
+        conn_m.close()
 
 
 def _normalize_month_value(month_value):
@@ -278,18 +284,23 @@ def search_eb_solar(
         return str(month_value)
 
     try:
-        # Resolve solar_number to solar_id if provided
+        # Resolve solar_number to solar_id if provided using a masters connection
         if solar_number:
+            conn_m = get_connection(db_name="masters")
+            cursor_m = conn_m.cursor()
             try:
-                cursor.callproc("masters.sp_get_windmill_id_by_number", (solar_number,))
-                wm_row = cursor.fetchone()
+                cursor_m.callproc("sp_get_windmill_id_by_number", (solar_number,))
+                wm_row = cursor_m.fetchone()
                 if wm_row:
                     solar_id = wm_row[0]
             except Exception as wm_exc:
                 print(f"Warning: Could not resolve solar_number to id: {wm_exc}")
+            finally:
+                cursor_m.close()
+                conn_m.close()
 
         # Call stored procedure
-        cursor.callproc("solar.sp_search_eb_solar", (solar_id, year, month, status, keyword, limit, offset))
+        cursor.callproc("sp_search_eb_solar", (solar_id, year, month, status, keyword, limit, offset))
         
         # Result Set 1: Total Count
         rows_count = cursor.fetchall()
@@ -303,16 +314,21 @@ def search_eb_solar(
         else:
             items = []
 
-        # Get solar numbers separately for items
+        # Get solar numbers separately for items using a masters connection
         solar_ids = [item.get('solar_id') for item in items if item.get('solar_id')]
         solar_map = {}
         if solar_ids:
+            conn_m = get_connection(db_name="masters")
+            cursor_m = conn_m.cursor()
             try:
-                cursor.callproc("masters.sp_get_windmill_numbers_by_ids", (",".join(map(str, solar_ids)),))
-                for row in cursor.fetchall():
+                cursor_m.callproc("sp_get_windmill_numbers_by_ids", (",".join(map(str, solar_ids)),))
+                for row in cursor_m.fetchall():
                     solar_map[row[0]] = {"number": row[1], "name": row[2]}
             except Exception as e:
                 print(f"Warning: Could not fetch solar numbers for items: {e}")
+            finally:
+                cursor_m.close()
+                conn_m.close()
         
         # Normalize items
         for item in items:
@@ -383,7 +399,7 @@ def get_all_eb_solar(
         return str(month_value)
 
     try:
-        cursor.callproc("solar.sp_search_eb_solar", (None, None, None, None, None, limit, offset))
+        cursor.callproc("sp_search_eb_solar", (None, None, None, None, None, limit, offset))
         
         # Result Set 1: Total Count
         rows_count = cursor.fetchall()
@@ -397,16 +413,21 @@ def get_all_eb_solar(
         else:
             items = []
 
-        # Get solar numbers separately
+        # Get solar numbers separately using a masters connection
         solar_ids = [item.get('solar_id') for item in items if item.get('solar_id')]
         solar_map = {}
         if solar_ids:
+            conn_m = get_connection(db_name="masters")
+            cursor_m = conn_m.cursor()
             try:
-                cursor.callproc("masters.sp_get_windmill_numbers_by_ids", (",".join(map(str, solar_ids)),))
-                for row in cursor.fetchall():
+                cursor_m.callproc("sp_get_windmill_numbers_by_ids", (",".join(map(str, solar_ids)),))
+                for row in cursor_m.fetchall():
                     solar_map[row[0]] = {"number": row[1], "name": row[2]}
             except Exception as e:
                 print(f"Warning: Could not fetch solar numbers: {e}")
+            finally:
+                cursor_m.close()
+                conn_m.close()
         
         # Add solar_number and windmill_name to items
         for item in items:
@@ -455,7 +476,7 @@ async def get_eb_statement_solar_details(eb_header_id: int):
     conn = get_connection(db_name="solar")
     cursor = conn.cursor()
     try:
-        cursor.callproc("solar.sp_get_eb_solar_details", (eb_header_id,))
+        cursor.callproc("sp_get_eb_solar_details", (eb_header_id,))
         details = [
             {
                 "id": row[0],
@@ -467,7 +488,7 @@ async def get_eb_statement_solar_details(eb_header_id: int):
             for row in cursor.fetchall()
         ]
 
-        cursor.callproc("solar.sp_get_eb_solar_charges", (eb_header_id,))
+        cursor.callproc("sp_get_eb_solar_charges", (eb_header_id,))
         charges = [
             {
                 "id": row[0],
@@ -486,11 +507,16 @@ async def get_eb_statement_solar_details(eb_header_id: int):
         system_net = 0
         if info:
             s_id, m_name, y_val = info
-            cursor.callproc("masters.sp_get_windmill_number_by_id_or_val", (str(s_id),))
-            wm_num_row = cursor.fetchone()
-            while cursor.nextset(): pass
-            wm_num = wm_num_row[0] if wm_num_row else str(s_id)
-            system_net = get_system_net(cursor, wm_num, m_name, y_val)
+            conn_m = get_connection(db_name="masters")
+            cursor_m = conn_m.cursor()
+            try:
+                cursor_m.callproc("sp_get_windmill_number_by_id_or_val", (str(s_id),))
+                wm_num_row = cursor_m.fetchone()
+                wm_num = wm_num_row[0] if wm_num_row else str(s_id)
+                system_net = get_system_net(cursor, wm_num, m_name, y_val)
+            finally:
+                cursor_m.close()
+                conn_m.close()
 
         return {
             "status": "success",
@@ -524,7 +550,7 @@ def export_eb_solar(
     cursor = conn.cursor()
     try:
         cursor.execute(
-            "CALL solar.sp_export_eb_statement_solar(%s,%s,%s,%s,%s)",
+            "CALL sp_export_eb_statement_solar(%s,%s,%s,%s,%s)",
             (solar_id, year, month, status, keyword),
         )
         rows = cursor.fetchall()
@@ -567,7 +593,7 @@ async def read_eb_statement_solar_pdf(
         solar_num = get_solar_number(cursor, solar_id)
 
         # Check for duplicate upload (same solar_id, month, and year)
-        cursor.callproc("solar.sp_check_eb_solar_duplicate", (solar_id, month_name, final_year))
+        cursor.callproc("sp_check_eb_solar_duplicate", (solar_id, month_name, final_year))
         existing_record = cursor.fetchone()
         if existing_record:
             raise HTTPException(
@@ -599,26 +625,26 @@ async def read_eb_statement_solar_pdf(
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    # GET expected_windmill_no from master_windmill by id or number
+    # GET expected_windmill_no from master_windmill by id or number using masters connection
     expected_wm = ""
-    conn = get_connection(db_name="solar")
-    cursor = conn.cursor()
+    conn_m = get_connection(db_name="masters")
+    cursor_m = conn_m.cursor()
     try:
         if solar_id:
             # Determine if solar_id is numeric id or actual windmill number
             if str(solar_id).isdigit():
-                cursor.callproc("masters.sp_get_windmill_number_by_id_only", (int(solar_id),))
+                cursor_m.callproc("sp_get_windmill_number_by_id_only", (int(solar_id),))
             else:
-                cursor.callproc("masters.sp_get_windmill_id_by_number", (solar_id,))
-                res = cursor.fetchone()
+                cursor_m.callproc("sp_get_windmill_id_by_number", (solar_id,))
+                res = cursor_m.fetchone()
                 if res:
-                    cursor.callproc("masters.sp_get_windmill_number_by_id_only", (res[0],))
+                    cursor_m.callproc("sp_get_windmill_number_by_id_only", (res[0],))
             
-            row = cursor.fetchone()
+            row = cursor_m.fetchone()
             expected_wm = row[0] if row else ""
     finally:
-        cursor.close()
-        conn.close()
+        cursor_m.close()
+        conn_m.close()
 
     # Parse and validate PDF data BEFORE saving to DB
     try:
@@ -644,7 +670,7 @@ async def read_eb_statement_solar_pdf(
         cursor = conn.cursor()
         
         cursor.callproc(
-            "solar.sp_create_eb_solar_header",
+            "sp_create_eb_solar_header",
             (int(solar_id) if solar_id and str(solar_id).isdigit() else solar_id, month_name, final_year, unique_name, 1)
         )
         conn.commit()
@@ -684,7 +710,7 @@ async def read_eb_statement_solar_metadata(filename: str, user: dict = Depends(g
     cursor = conn.cursor()
     try:
         # 1. Get header info from DB
-        cursor.callproc("solar.sp_get_eb_solar_by_filename_extended", (filename,))
+        cursor.callproc("sp_get_eb_solar_by_filename_extended", (filename,))
         row = cursor.fetchone()
         header_id = row[0] if row else None
         db_month = row[1] if row else None
@@ -692,14 +718,14 @@ async def read_eb_statement_solar_metadata(filename: str, user: dict = Depends(g
         is_submitted = row[3] if row else 0
 
         if header_id is None:
-             cursor.callproc("solar.sp_get_eb_solar_metadata_by_filename", (filename,))
+             cursor.callproc("sp_get_eb_solar_metadata_by_filename", (filename,))
              row = cursor.fetchone()
              if row:
                 header_id = row[0]
                 db_month = row[1]
                 db_year = row[2]
                 # is_submitted might need a separate check if not in SP
-                cursor.callproc("solar.sp_get_eb_solar_by_id_simple", (header_id,))
+                cursor.callproc("sp_get_eb_solar_by_id_simple", (header_id,))
                 sub_row = cursor.fetchone()
                 is_submitted = sub_row[3] if sub_row else 0
 
@@ -734,7 +760,7 @@ async def read_eb_statement_solar_metadata(filename: str, user: dict = Depends(g
 
         # Try by solar_id if header is not found
         if header_id is None and solar_id_val is not None:
-            cursor.callproc("solar.sp_get_eb_solar_latest_by_solar_id", (solar_id_val,))
+            cursor.callproc("sp_get_eb_solar_latest_by_solar_id", (solar_id_val,))
             row = cursor.fetchone()
             header_id = row[0] if row else None
             if not db_month: db_month = row[1] if row else None
@@ -743,13 +769,19 @@ async def read_eb_statement_solar_metadata(filename: str, user: dict = Depends(g
         # Prepare windmill number context
         master_wm = ""
         if header_id is not None:
-            cursor.callproc("solar.sp_get_eb_solar_by_id_simple", (header_id,))
+            cursor.callproc("sp_get_eb_solar_by_id_simple", (header_id,))
             row = cursor.fetchone()
             solar_id_from_header = row[5] if row else None
             if solar_id_from_header is not None:
-                cursor.callproc("masters.sp_get_windmill_number_by_id_only", (solar_id_from_header,))
-                row2 = cursor.fetchone()
-                master_wm = row2[0] if row2 else ""
+                conn_m = get_connection(db_name="masters")
+                cursor_m = conn_m.cursor()
+                try:
+                    cursor_m.callproc("sp_get_windmill_number_by_id_only", (solar_id_from_header,))
+                    row2 = cursor_m.fetchone()
+                    master_wm = row2[0] if row2 else ""
+                finally:
+                    cursor_m.close()
+                    conn_m.close()
 
         if not master_wm and solar_id_val is not None:
             cursor.execute("SELECT windmill_number, windmill_name FROM masters.master_windmill WHERE id = %s", (solar_id_val,))
