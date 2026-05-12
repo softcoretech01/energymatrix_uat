@@ -85,33 +85,35 @@ async def upload_eb_statement_solar(
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files allowed")
 
-    # Get Solar Number for naming/check
-    cursor = conn.cursor()
-    solar_num = get_solar_number(cursor, solar_id)
-    cursor.close()
+    # Normalize month and year before check
+    month_name = normalize_month(month)
+    final_year = year if year else __import__('datetime').datetime.now().year
 
-    # Check for duplicate upload (same solar_id, month, and year)
+    # Get Solar Number and check for duplicate
+    conn = get_connection(db_name="solar")
     cursor = conn.cursor()
     try:
-        cursor.callproc("solar.sp_check_eb_solar_duplicate", (solar_id, month, year))
+        solar_num = get_solar_number(cursor, solar_id)
+        
+        cursor.callproc("solar.sp_check_eb_solar_duplicate", (solar_id, month_name, final_year))
         existing_record = cursor.fetchone()
         if existing_record:
             raise HTTPException(
                 status_code=409, 
-                detail=f"For {solar_num}, {month} eb statement, is already uploaded."
+                detail=f"For {solar_num}, {month_name} eb statement, is already uploaded."
             )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
-        cursor.close()
-        conn.close()
+        if 'cursor' in locals() and cursor:
+            cursor.close()
+        if 'conn' in locals() and conn:
+            conn.close()
 
-    # Get Solar Number for naming
-    cursor = conn.cursor()
-    solar_num = get_solar_number(cursor, solar_id)
-    cursor.close()
-
-    # Normalize month
-    month_name = normalize_month(month)
-    year_str = str(year) if year else str(__import__('datetime').datetime.now().year)
+    # month_name and final_year are already resolved
+    year_str = str(final_year)
     
     # New Structured Path: uploads/eb_statements_solar/year/month
     target_dir = os.path.join(BASE_DIR, "uploads", "eb_statements_solar", year_str, month_name)
@@ -171,7 +173,7 @@ async def upload_eb_statement_solar(
             try:
                 conn = get_connection(db_name="solar")
                 cur = conn.cursor()
-                cursor.callproc("solar.sp_delete_eb_solar_header", (header_id,))
+                cur.callproc("solar.sp_delete_eb_solar_header", (header_id,))
                 conn.commit()
                 cur.close()
                 conn.close()
@@ -554,24 +556,36 @@ async def read_eb_statement_solar_pdf(
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files allowed")
 
-    # Get Solar Number for naming/check
-    solar_num = get_solar_number(cursor, solar_id)
+    # Normalize month and year before check
+    month_name = normalize_month(month)
+    final_year = year if year else __import__('datetime').datetime.now().year
 
-    # Check for duplicate upload (same solar_id, month, and year)
+    # Get Solar Number and check for duplicate
+    conn = get_connection(db_name="solar")
+    cursor = conn.cursor()
     try:
-        cursor.callproc("solar.sp_check_eb_solar_duplicate", (solar_id, month, year))
+        solar_num = get_solar_number(cursor, solar_id)
+
+        # Check for duplicate upload (same solar_id, month, and year)
+        cursor.callproc("solar.sp_check_eb_solar_duplicate", (solar_id, month_name, final_year))
         existing_record = cursor.fetchone()
         if existing_record:
             raise HTTPException(
                 status_code=409, 
-                detail=f"For {solar_num}, {month} eb statement, is already uploaded."
+                detail=f"For {solar_num}, {month_name} eb statement, is already uploaded."
             )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
-        pass
+        if 'cursor' in locals() and cursor:
+            cursor.close()
+        if 'conn' in locals() and conn:
+            conn.close()
     
-    # Normalize month
-    month_name = normalize_month(month)
-    year_str = str(year) if year else str(__import__('datetime').datetime.now().year)
+    # month_name and final_year are already resolved
+    year_str = str(final_year)
 
     # New Structured Path: uploads/eb_statements_solar/year/month
     target_dir = os.path.join(BASE_DIR, "uploads", "eb_statements_solar", year_str, month_name)

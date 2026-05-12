@@ -271,8 +271,9 @@ async def get_invoice_print_data(
         
         actual_tax = float(tax_row["total_tax"] or 0) if tax_row else 0.0
 
-        # Rule: For L&T customer, tax is always 0
-        is_lt = "L&T" in (row_copy.get("customer_name") or "")
+        # Rule: For L&T / Larsen & Toubro customer, tax is always 0
+        customer_name = (row_copy.get("customer_name") or "").upper()
+        is_lt = "L&T" in customer_name or "LARSEN" in customer_name or "LARSON" in customer_name
         if is_lt:
             actual_tax = 0.0
 

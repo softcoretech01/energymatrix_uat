@@ -53,8 +53,9 @@ export default function ClientInvoiceAdd() {
 
     const fetchCustomers = async () => {
         try {
-            const response = await api.get("/customers");
-            setCustomers(response.data);
+            const response = await api.get("/eb-bill/customers");
+            // The /eb-bill/customers returns { status: 'success', data: [...] }
+            setCustomers(response.data?.data || []);
         } catch (error) {
             console.error("Error fetching customers:", error);
             toast.error("Failed to fetch customers");
@@ -63,8 +64,9 @@ export default function ClientInvoiceAdd() {
 
     const fetchServiceNumbers = async (customerId: string) => {
         try {
-            const response = await api.get(`/customers/${customerId}/se`);
-            setServiceNumbers(response.data);
+            const response = await api.get(`/eb-bill/service-numbers/${customerId}`);
+            // The /eb-bill/service-numbers returns { status: 'success', data: [...] }
+            setServiceNumbers(response.data?.data || []);
         } catch (error) {
             console.error("Error fetching service numbers:", error);
             toast.error("Failed to fetch service numbers");
@@ -113,15 +115,6 @@ export default function ClientInvoiceAdd() {
                         Client Invoice - Add
                     </h1>
                     <div className="flex gap-2">
-                        <Button
-                            size="sm"
-                            className="bg-blue-600 hover:bg-blue-700 text-white h-8 px-4 flex items-center gap-2"
-                            onClick={handleGenerateInvoice}
-                            disabled={generating}
-                        >
-                            <ReceiptText className="h-4 w-4" />
-                            {generating ? "Generating..." : "Generate Invoice"}
-                        </Button>
 
                         <Button
                             size="sm"
@@ -222,8 +215,7 @@ export default function ClientInvoiceAdd() {
 
                         {/* Generate Action Area */}
                         <div
-                            className="mt-8 bg-indigo-50/50 border-2 border-dashed border-indigo-200 rounded-xl p-12 text-center hover:bg-indigo-50 transition-all cursor-pointer group"
-                            onClick={handleGenerateInvoice}
+                            className="mt-8 bg-indigo-50/50 border-2 border-dashed border-indigo-200 rounded-xl p-12 text-center hover:bg-indigo-50 transition-all group"
                         >
                             <div className="bg-white p-4 rounded-full shadow-md w-20 h-20 flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform">
                                 <FileCheck className="h-10 w-10 text-indigo-600" />
@@ -236,6 +228,7 @@ export default function ClientInvoiceAdd() {
 
                             <Button
                                 className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-6 rounded-lg text-lg font-bold shadow-lg shadow-indigo-200 flex items-center gap-3 mx-auto"
+                                onClick={handleGenerateInvoice}
                                 disabled={generating}
                             >
                                 {generating ? (
