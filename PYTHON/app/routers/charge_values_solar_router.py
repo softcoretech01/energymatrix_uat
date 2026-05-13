@@ -1,4 +1,4 @@
-from app.database import get_db, get_connection
+from app.database import get_db, get_db_solar, get_connection
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -45,7 +45,7 @@ def perform_solar_charge_calculation(db: Session, solar_id: int, month: int, yea
         while cursor.nextset(): pass
 
         # 2.5 Get solar units from eb_statement_solar_details if exists
-        cursor.callproc("solar.sp_get_solar_units", (solar_id, month, year))
+        cursor.callproc("sp_get_solar_units", (solar_id, month, year))
         units_res = cursor.fetchone()
         while cursor.nextset(): pass
         solar_units = float(units_res[0] or 0) if units_res else 0
@@ -103,12 +103,12 @@ def perform_solar_charge_calculation(db: Session, solar_id: int, month: int, yea
             })
 
         # 4. Delete old records from SOLAR table
-        cursor.callproc("solar.sp_delete_solar_charge_calculation", (solar_id, month, year))
+        cursor.callproc("sp_delete_solar_charge_calculation", (solar_id, month, year))
         while cursor.nextset(): pass
 
         # 5. Insert new records into SOLAR table
         for item in charges_list:
-            cursor.callproc("solar.sp_insert_solar_charge_calculation", (
+            cursor.callproc("sp_insert_solar_charge_calculation", (
                 solar_id, month, year, item["charge_id"], item["value"], item["calculation"]
             ))
             while cursor.nextset(): pass
@@ -120,7 +120,7 @@ def perform_solar_charge_calculation(db: Session, solar_id: int, month: int, yea
         cursor.close()
 
 @router.post("/calculate")
-def calculate_solar_charges(payload: ChargeRequest, db: Session = Depends(get_db)):
+def calculate_solar_charges(payload: ChargeRequest, db: Session = Depends(get_db_solar)):
     s_id = payload.solar_id
     m_val = payload.month
     y_val = payload.year
@@ -129,7 +129,7 @@ def calculate_solar_charges(payload: ChargeRequest, db: Session = Depends(get_db
         conn = db.get_bind().raw_connection()
         cursor = conn.cursor()
         try:
-            cursor.callproc("solar.sp_get_eb_solar_info", (payload.eb_header_id,))
+            cursor.callproc("sp_get_eb_solar_info", (payload.eb_header_id,))
             info = cursor.fetchone()
             if info:
                 s_id, m_val, y_val = info[0], info[1], info[2]
@@ -165,13 +165,13 @@ def calculate_solar_charges(payload: ChargeRequest, db: Session = Depends(get_db
     }
 
 @router.get("/compare-charges")
-def compare_solar_charges(eb_header_id: int, db: Session = Depends(get_db)):
+def compare_solar_charges(eb_header_id: int, db: Session = Depends(get_db_solar)):
     conn = db.get_bind().raw_connection()
     cursor = conn.cursor()
 
     try:
         # 1. Get statement info from SOLAR tables
-        cursor.callproc("solar.sp_get_eb_solar_info", (eb_header_id,))
+        cursor.callproc("sp_get_eb_solar_info", (eb_header_id,))
         info = cursor.fetchone()
         if not info:
             raise HTTPException(status_code=404, detail="Solar EB Statement not found")
@@ -195,7 +195,7 @@ def compare_solar_charges(eb_header_id: int, db: Session = Depends(get_db)):
 
         # 3. Get Statement Charges from solar.eb_statement_solar_applicable_charges
         pdf_charges_map = {}
-        cursor.callproc("solar.sp_get_eb_solar_charges", (eb_header_id,))
+        cursor.callproc("sp_get_eb_solar_charges", (eb_header_id,))
         for row in cursor.fetchall():
             # sp_get_eb_solar_charges returns: id, charge_id, total_charge, charge_description, charge_code
             cid = row[1]
@@ -208,12 +208,12 @@ def compare_solar_charges(eb_header_id: int, db: Session = Depends(get_db)):
         for sid in [5, 6, 8]:
             if sid in pdf_charges_map:
                 val = pdf_charges_map[sid]
-                cursor.callproc("solar.sp_update_solar_charge_calculation_value", (val, solar_id, month_int, year_val, sid))
+                cursor.callproc("sp_update_solar_charge_calculation_value", (val, solar_id, month_int, year_val, sid))
                 while cursor.nextset(): pass
         conn.commit()
 
         # 5. Get Calculated Charges from solar.charge_calculation
-        cursor.callproc("solar.sp_get_solar_calculated_charges", (solar_id, month_int, year_val))
+        cursor.callproc("sp_get_solar_calculated_charges", (solar_id, month_int, year_val))
         calc_res = cursor.fetchall()
         while cursor.nextset(): pass
         calc_map = {row[0]: float(row[1] or 0) for row in calc_res}

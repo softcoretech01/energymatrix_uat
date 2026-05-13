@@ -155,7 +155,7 @@ def calculate_charges(payload: ChargeRequest, db: Session = Depends(get_db)):
         conn = db.get_bind().raw_connection()
         cursor = conn.cursor()
         try:
-            cursor.callproc("windmill.sp_get_eb_statement_info", (payload.eb_header_id,))
+            cursor.callproc("sp_get_eb_statement_info", (payload.eb_header_id,))
             info = cursor.fetchone()
             if info:
                 # Row: windmill_id, month, year
@@ -201,7 +201,7 @@ def compare_charges(eb_header_id: int, db: Session = Depends(get_db)):
     
     try:
         # 1. Get statement info (windmill_id, month, year, etc.)
-        cursor.callproc("windmill.sp_get_eb_statement_info", (eb_header_id,))
+        cursor.callproc("sp_get_eb_statement_info", (eb_header_id,))
         info = cursor.fetchone()
         while cursor.nextset(): pass
         
@@ -214,7 +214,7 @@ def compare_charges(eb_header_id: int, db: Session = Depends(get_db)):
         year_val = info[2]
 
         # Also get the PDF path using the SP
-        cursor.callproc("windmill.sp_get_eb_statement_by_id", (eb_header_id,))
+        cursor.callproc("sp_get_eb_statement_by_id", (eb_header_id,))
         stmt_row = cursor.fetchone()
         while cursor.nextset(): pass
         
@@ -239,7 +239,7 @@ def compare_charges(eb_header_id: int, db: Session = Depends(get_db)):
         pdf_charges_map = {}
         
         # First, try to get already saved charges from DB using SP
-        cursor.callproc("windmill.sp_get_eb_statement_charges", (eb_header_id,))
+        cursor.callproc("sp_get_eb_statement_charges", (eb_header_id,))
         saved_charges = cursor.fetchall()
         while cursor.nextset(): pass
         
