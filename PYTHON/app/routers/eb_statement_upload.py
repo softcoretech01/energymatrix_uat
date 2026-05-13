@@ -369,6 +369,15 @@ async def get_eb_statement_list(
                 "submitted_by": row["submitted_by"]
             })
 
+        # 1. Map months to numbers for sorting
+        month_map = {
+            "january": 1, "february": 2, "march": 3, "april": 4, "may": 5, "june": 6,
+            "july": 7, "august": 8, "september": 9, "october": 10, "november": 11, "december": 12
+        }
+        
+        # 2. Sort by year (desc) then month (desc)
+        data.sort(key=lambda x: (int(x["year"] or 0), month_map.get(str(x["month"]).lower(), 0)), reverse=True)
+
         return {
             "status": "success",
             "data": data

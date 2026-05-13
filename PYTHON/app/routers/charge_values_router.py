@@ -1,4 +1,4 @@
-from app.database import get_db
+from app.database import get_db, get_connection
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -31,12 +31,14 @@ def get_days(month, year):
 def perform_charge_calculation(db: Session, windmill_id: int, month: int, year: int):
     conn = db.get_bind().raw_connection()
     cursor = conn.cursor()
+    conn_m = get_connection(db_name="masters")
+    cursor_m = conn_m.cursor()
 
     try:
         #  1. Get windmill capacity
-        cursor.callproc("masters.sp_get_windmill_capacity", (windmill_id,))
-        cap_result = cursor.fetchone()
-        while cursor.nextset(): pass
+        cursor_m.callproc("sp_get_windmill_capacity", (windmill_id,))
+        cap_result = cursor_m.fetchone()
+        while cursor_m.nextset(): pass
 
         if not cap_result:
             return None, 0.0
@@ -45,9 +47,9 @@ def perform_charge_calculation(db: Session, windmill_id: int, month: int, year: 
         days = get_days(month, year)
 
         # 2. Get charges master data
-        cursor.callproc("masters.sp_get_charges_master_data")
-        charges_data = cursor.fetchall()
-        while cursor.nextset(): pass
+        cursor_m.callproc("sp_get_charges_master_data")
+        charges_data = cursor_m.fetchall()
+        while cursor_m.nextset(): pass
 
         charges_list = []
         total = 0.0
@@ -125,11 +127,11 @@ def perform_charge_calculation(db: Session, windmill_id: int, month: int, year: 
             })
 
         # 4. Delete old records
-        cursor.callproc("masters.sp_delete_charge_calculation", (windmill_id, month, year))
+        cursor_m.callproc("sp_delete_charge_calculation", (windmill_id, month, year))
 
         #  5. Insert new records
         for item in charges_list:
-            cursor.callproc("masters.sp_insert_charge_calculation", (
+            cursor_m.callproc("sp_insert_charge_calculation", (
                 windmill_id, 
                 month, 
                 year, 
@@ -139,10 +141,13 @@ def perform_charge_calculation(db: Session, windmill_id: int, month: int, year: 
             ))
 
         conn.commit()
+        conn_m.commit()
         return charges_list, total
 
     finally:
         cursor.close()
+        cursor_m.close()
+        conn_m.close()
 
 @router.post("/calculate")
 def calculate_charges(payload: ChargeRequest, db: Session = Depends(get_db)):
@@ -198,6 +203,8 @@ def calculate_charges(payload: ChargeRequest, db: Session = Depends(get_db)):
 def compare_charges(eb_header_id: int, db: Session = Depends(get_db)):
     conn = db.get_bind().raw_connection()
     cursor = conn.cursor()
+    conn_m = get_connection(db_name="masters")
+    cursor_m = conn_m.cursor()
     
     try:
         # 1. Get statement info (windmill_id, month, year, etc.)
@@ -253,9 +260,9 @@ def compare_charges(eb_header_id: int, db: Session = Depends(get_db)):
         # If no saved charges, or to supplement, try PDF parsing
         if not pdf_charges_map and pdf_path and os.path.exists(pdf_path):
             try:
-                cursor.callproc("masters.sp_get_windmill_number_by_id_or_val", (str(windmill_id),))
-                wm_num_row = cursor.fetchone()
-                while cursor.nextset(): pass
+                cursor_m.callproc("sp_get_windmill_number_by_id_or_val", (str(windmill_id),))
+                wm_num_row = cursor_m.fetchone()
+                while cursor_m.nextset(): pass
                 
                 wm_number = wm_num_row[0] if wm_num_row else str(windmill_id)
                 
@@ -272,22 +279,22 @@ def compare_charges(eb_header_id: int, db: Session = Depends(get_db)):
                     name_norm = " ".join(str(name).strip().lower().split())
                     
                     try:
-                        cursor.callproc("masters.sp_mapping_charge_id", (name_norm, ""))
-                        res = cursor.fetchone()
+                        cursor_m.callproc("sp_mapping_charge_id", (name_norm, ""))
+                        res = cursor_m.fetchone()
                         if res: charge_id = res[0]
-                        while cursor.nextset(): pass
+                        while cursor_m.nextset(): pass
                         
                         if not charge_id and code:
-                            cursor.callproc("masters.sp_mapping_charge_id_by_code", (str(code).strip().lower(),))
-                            res = cursor.fetchone()
+                            cursor_m.callproc("sp_mapping_charge_id_by_code", (str(code).strip().lower(),))
+                            res = cursor_m.fetchone()
                             if res: charge_id = res[0]
-                            while cursor.nextset(): pass
+                            while cursor_m.nextset(): pass
                             
                         if not charge_id:
-                            cursor.callproc("masters.sp_mapping_charge_id_fallback", (name_norm,))
-                            res = cursor.fetchone()
+                            cursor_m.callproc("sp_mapping_charge_id_fallback", (name_norm,))
+                            res = cursor_m.fetchone()
                             if res: charge_id = res[0]
-                            while cursor.nextset(): pass
+                            while cursor_m.nextset(): pass
                     except:
                         pass
                     
@@ -300,14 +307,15 @@ def compare_charges(eb_header_id: int, db: Session = Depends(get_db)):
         for special_id in [5, 6, 8]:
             if special_id in pdf_charges_map:
                 val = pdf_charges_map[special_id]
-                cursor.callproc("masters.sp_update_charge_calculation_value", (val, windmill_id, month_int, year_val, special_id))
-                while cursor.nextset(): pass
+                cursor_m.callproc("sp_update_charge_calculation_value", (val, windmill_id, month_int, year_val, special_id))
+                while cursor_m.nextset(): pass
         conn.commit()
+        conn_m.commit()
 
         # 5. Get Calculated Charges (Including the forced overrides for 5, 6 and 8)
-        cursor.callproc("masters.sp_get_calculated_charges", (windmill_id, month_int, year_val))
-        calc_results = cursor.fetchall()
-        while cursor.nextset(): pass
+        cursor_m.callproc("sp_get_calculated_charges", (windmill_id, month_int, year_val))
+        calc_results = cursor_m.fetchall()
+        while cursor_m.nextset(): pass
         
         calc_map = {row[0]: float(row[1] or 0) for row in calc_results}
         calc_info_map = {row[0]: row[2] for row in calc_results}
@@ -325,9 +333,9 @@ def compare_charges(eb_header_id: int, db: Session = Depends(get_db)):
         names_map = {}
         if all_charge_ids:
             try:
-                cursor.callproc("masters.sp_get_charge_names")
-                names_results = cursor.fetchall()
-                while cursor.nextset(): pass
+                cursor_m.callproc("sp_get_charge_names")
+                names_results = cursor_m.fetchall()
+                while cursor_m.nextset(): pass
                 
                 # Map only the ones we need, or just build the whole map since it's small
                 names_map = {row[0]: row[1] for row in names_results if row[0] in all_charge_ids}
@@ -345,9 +353,9 @@ def compare_charges(eb_header_id: int, db: Session = Depends(get_db)):
                 calc_val = stmt_val
 
             # Skip Wheeling Charges (C009), Self Generation Tax (C011), and C012 as requested
-            cursor.callproc("masters.sp_get_charge_code_by_id", (cid,))
-            code_res = cursor.fetchone()
-            while cursor.nextset(): pass
+            cursor_m.callproc("sp_get_charge_code_by_id", (cid,))
+            code_res = cursor_m.fetchone()
+            while cursor_m.nextset(): pass
             if code_res and code_res[0] in ["C009", "C011", "C012"]:
                 continue
 
@@ -369,3 +377,5 @@ def compare_charges(eb_header_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
     finally:
         cursor.close()
+        cursor_m.close()
+        conn_m.close()

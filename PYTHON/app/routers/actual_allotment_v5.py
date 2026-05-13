@@ -114,7 +114,7 @@ async def upload_actual_allotment(
         cursor = conn.cursor(pymysql.cursors.DictCursor)
         
         # 1. Fetch expected WM No via SP
-        cursor.callproc("windmill.sp_get_all_windmill_numbers", ())
+        cursor.callproc("sp_get_all_windmill_numbers", ())
         wm_rows = cursor.fetchall()
         while cursor.nextset(): pass
         
@@ -184,7 +184,7 @@ async def upload_actual_allotment(
             allotment_total = item["allotment_total"]
             
             # Resolve service_id via SP
-            cursor.callproc("windmill.sp_get_service_id_by_consumer_no", (consumer_no,))
+            cursor.callproc("sp_get_service_id_by_consumer_no", (consumer_no,))
             row = cursor.fetchone()
             while cursor.nextset(): pass
 
@@ -248,6 +248,8 @@ async def get_actual_allotment_list(
                 safe_r['reconciliation_status'] = 'Matched' if abs(manual_val - sys_val) < 0.0001 else 'Mismatched'
             final_result.append(safe_r)
         
+        # Sort by year (desc) then month (desc)
+        final_result.sort(key=lambda x: (int(x.get("year") or 0), int(x.get("month") or 0)), reverse=True)
         return final_result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -269,7 +271,7 @@ async def delete_actual_allotment(record_id: int, user: dict = Depends(get_curre
     conn = get_connection(db_name=DB_NAME_WINDMILL)
     cursor = conn.cursor()
     try:
-        cursor.callproc("windmill.sp_delete_actual_allotment", (record_id,))
+        cursor.callproc("sp_delete_actual_allotment", (record_id,))
         if cursor.rowcount == 0: raise HTTPException(status_code=404, detail="Record not found")
         conn.commit()
         return {"message": "Record deleted successfully"}
@@ -286,18 +288,18 @@ async def get_reconciliation_details(client_eb_id: int):
     cursor = conn.cursor(pymysql.cursors.DictCursor)
     sp_cursor = conn.cursor() 
     try:
-        cursor.callproc("windmill.sp_get_eb_bill_header_info", (client_eb_id,))
+        cursor.callproc("sp_get_eb_bill_header_info", (client_eb_id,))
         header = cursor.fetchone()
         while cursor.nextset(): pass
         if not header: raise HTTPException(status_code=404, detail="EB Bill not found")
         
         b_year, b_month, s_id = header['bill_year'], header['bill_month'], header['sc_id']
-        cursor.callproc("windmill.sp_get_customer_service_info", (s_id,))
+        cursor.callproc("sp_get_customer_service_info", (s_id,))
         customer_info = cursor.fetchone()
         while cursor.nextset(): pass
 
         # Fetch from windmill.actual via SP
-        cursor.callproc("windmill.sp_get_reconciliation_system_charges", (client_eb_id,))
+        cursor.callproc("sp_get_reconciliation_system_charges", (client_eb_id,))
         actual_rows = cursor.fetchall()
         while cursor.nextset(): pass
         

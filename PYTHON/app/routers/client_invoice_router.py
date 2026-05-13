@@ -191,6 +191,14 @@ async def get_invoice_list(
                 row_copy["invoice_date"] = str(row_copy["invoice_date"])
             result.append(row_copy)
 
+        # 1. Map months to numbers for sorting
+        month_map = {
+            "january": 1, "february": 2, "march": 3, "april": 4, "may": 5, "june": 6,
+            "july": 7, "august": 8, "september": 9, "october": 10, "november": 11, "december": 12
+        }
+        # 2. Sort by year (desc) then month (desc)
+        result.sort(key=lambda x: (int(x.get("year") or 0), month_map.get(str(x.get("month")).lower(), 0)), reverse=True)
+
         return {"status": "success", "data": result}
 
     except Exception as e:

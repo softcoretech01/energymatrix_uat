@@ -33,7 +33,7 @@ async def create_total(data: TotalSharesCreate, user: dict = Depends(get_current
     cursor = conn.cursor(pymysql.cursors.DictCursor)
 
     # Ensure only one configuration row is used (id=1), no new rows (id=2+) are created.
-    cursor.callproc("masters.sp_check_configuration_row_exists", (1,))
+    cursor.callproc("sp_check_configuration_row_exists", (1,))
     existing = cursor.fetchone()
 
     if existing:

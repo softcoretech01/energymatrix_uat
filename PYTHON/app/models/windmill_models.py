@@ -270,14 +270,14 @@ class ActualAllotment(Base):
     @staticmethod
     def save_allotment(cursor, windmill_id, service_id, allotment_total, year, month, pdf_path, user_id):
         cursor.callproc(
-            "windmill.sp_save_actual_allotment",
+            "sp_save_actual_allotment",
             (windmill_id, service_id, allotment_total, year, month, pdf_path, user_id)
         )
 
     @staticmethod
     def get_allotment_list(cursor, windmill_id=None, year=None, month=None):
         cursor.callproc(
-            "windmill.sp_get_actual_allotment_list",
+            "sp_get_actual_allotment_list",
             (windmill_id, year, month)
         )
         return cursor.fetchall()

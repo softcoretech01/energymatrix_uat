@@ -25,13 +25,15 @@ def perform_solar_charge_calculation(db: Session, solar_id: int, month: int, yea
     # For solar, we might use the same master_consumption_chargers but store in solar tables
     conn = db.get_bind().raw_connection()
     cursor = conn.cursor()
+    conn_m = get_connection(db_name="masters")
+    cursor_m = conn_m.cursor()
 
     try:
         # 1. Get solar capacity (using the same master_windmill table but filtered by type='solar' if needed)
         # Actually, capacity is stored in the same place.
-        cursor.callproc("masters.sp_get_windmill_capacity", (solar_id,))
-        cap_result = cursor.fetchone()
-        while cursor.nextset(): pass
+        cursor_m.callproc("sp_get_windmill_capacity", (solar_id,))
+        cap_result = cursor_m.fetchone()
+        while cursor_m.nextset(): pass
 
         if not cap_result:
             return None, 0.0
@@ -40,9 +42,9 @@ def perform_solar_charge_calculation(db: Session, solar_id: int, month: int, yea
         days = get_days(month, year)
 
         # 2. Get charges master data
-        cursor.callproc("masters.sp_get_charges_master_data")
-        charges_data = cursor.fetchall()
-        while cursor.nextset(): pass
+        cursor_m.callproc("sp_get_charges_master_data")
+        charges_data = cursor_m.fetchall()
+        while cursor_m.nextset(): pass
 
         # 2.5 Get solar units from eb_statement_solar_details if exists
         cursor.callproc("sp_get_solar_units", (solar_id, month, year))
@@ -118,6 +120,8 @@ def perform_solar_charge_calculation(db: Session, solar_id: int, month: int, yea
 
     finally:
         cursor.close()
+        cursor_m.close()
+        conn_m.close()
 
 @router.post("/calculate")
 def calculate_solar_charges(payload: ChargeRequest, db: Session = Depends(get_db_solar)):
@@ -168,6 +172,8 @@ def calculate_solar_charges(payload: ChargeRequest, db: Session = Depends(get_db
 def compare_solar_charges(eb_header_id: int, db: Session = Depends(get_db_solar)):
     conn = db.get_bind().raw_connection()
     cursor = conn.cursor()
+    conn_m = get_connection(db_name="masters")
+    cursor_m = conn_m.cursor()
 
     try:
         # 1. Get statement info from SOLAR tables
@@ -223,11 +229,11 @@ def compare_solar_charges(eb_header_id: int, db: Session = Depends(get_db_solar)
         all_ids = sorted(list(set(list(calc_map.keys()) + list(pdf_charges_map.keys()))))
         names_map = {}
         if all_ids:
-            cursor.callproc("masters.sp_get_charge_names")
-            for row in cursor.fetchall():
+            cursor_m.callproc("sp_get_charge_names")
+            for row in cursor_m.fetchall():
                 if row[0] in all_ids:
                     names_map[row[0]] = row[1]
-            while cursor.nextset(): pass
+            while cursor_m.nextset(): pass
 
         data = []
         for cid in all_ids:
@@ -237,9 +243,9 @@ def compare_solar_charges(eb_header_id: int, db: Session = Depends(get_db_solar)
             if cid in [5, 6, 8]: calc_val = stmt_val
             
             # Skip Wheeling Charges (C009) and Self Generation Tax (C011) as requested
-            cursor.callproc("masters.sp_get_charge_code_by_id", (cid,))
-            code_res = cursor.fetchone()
-            while cursor.nextset(): pass
+            cursor_m.callproc("sp_get_charge_code_by_id", (cid,))
+            code_res = cursor_m.fetchone()
+            while cursor_m.nextset(): pass
             if code_res and code_res[0] in ["C009", "C011"]:
                 continue
 
@@ -260,3 +266,5 @@ def compare_solar_charges(eb_header_id: int, db: Session = Depends(get_db_solar)
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cursor.close()
+        cursor_m.close()
+        conn_m.close()

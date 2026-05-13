@@ -314,6 +314,8 @@ async def get_eb_bill_list(
                 "created_at": row[7],
                 "created_by": row[8]
             })
+        # 1. Sort by year (desc) then month (desc)
+        data.sort(key=lambda x: (x["bill_year"], x["bill_month"]), reverse=True)
         return {"status": "success", "data": data}
     finally:
         cursor.close()
