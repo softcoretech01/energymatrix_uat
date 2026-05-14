@@ -13,6 +13,7 @@ import {
     SidebarMenuSubButton,
     SidebarMenuSubItem,
     SidebarTrigger,
+    useSidebar,
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import {
@@ -46,6 +47,7 @@ import {
 export function AppSidebar() {
     const location = useLocation();
     const navigate = useNavigate();
+    const { state, setOpen } = useSidebar();
 
     const handleLogout = async () => {
         const token = localStorage.getItem("access_token");
@@ -265,6 +267,11 @@ export function AppSidebar() {
                                         <SidebarMenuButton
                                             tooltip={item.title}
                                             className="h-11 hover:bg-sidebar-accent/50 text-sidebar-foreground data-[state=open]:bg-sidebar-accent/40 group-data-[collapsible=icon]:!p-0 group-data-[collapsible=icon]:justify-center"
+                                            onClick={() => {
+                                                if (state === "collapsed") {
+                                                    setOpen(true);
+                                                }
+                                            }}
                                         >
                                             <div className="p-1.5 rounded-md bg-white/10">
                                                 <item.icon className="w-4 h-4 text-sidebar-foreground" />
@@ -295,7 +302,11 @@ export function AppSidebar() {
                                                                     : "text-sidebar-foreground/80 hover:bg-white/10 hover:text-white"
                                                             )}
                                                         >
-                                                            <Link to={subItem.url} className="flex items-center gap-3">
+                                                            <Link to={subItem.url} className="flex items-center gap-3" onClick={() => {
+                                                                if (subItem.title === "Energy Allotment") {
+                                                                    setOpen(false);
+                                                                }
+                                                            }}>
                                                                 <subItem.icon className={cn(
                                                                     "w-4 h-4 transition-colors",
                                                                     isActive ? "text-white" : "text-sidebar-foreground/60"
@@ -332,7 +343,7 @@ export function AppSidebar() {
                         </SidebarMenuItem>
                     </SidebarMenu>
                     <div className="px-4 py-2 text-xs text-sidebar-foreground/70 text-center group-data-[collapsible=icon]:hidden">
-                        version 1.1.20
+                        version 1.1.21
                     </div>
                 </SidebarGroup>
             </SidebarContent>

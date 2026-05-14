@@ -8,7 +8,6 @@ from urllib.parse import quote_plus
 
 load_dotenv()
 
-# Database Configuration from .env
 DB_HOST = os.getenv("DB_HOST", "187.127.131.38")
 DB_PORT = int(os.getenv("DB_PORT", "3306"))
 DB_USER = os.getenv("DB_USER", "root")
@@ -24,9 +23,6 @@ READ_TIMEOUT = 60
 # Escape password for connection URL
 db_password_escaped = quote_plus(DB_PASSWORD)
 
-# --- SQLAlchemy Engines Configuration ---
-# pool_pre_ping: Verifies connection is alive before every query
-# pool_recycle: Refreshes connection every 5 mins (staying under the VPS 10-min limit)
 engine_params = {
     "connect_args": {
         "connect_timeout": CONNECT_TIMEOUT, 

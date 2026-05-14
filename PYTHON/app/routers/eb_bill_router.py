@@ -100,7 +100,7 @@ def extract_abstract_rows(pdf):
             found_headers = False
             for r_idx, r in enumerate(table[:3]):
                 row_text_r = " ".join([str(c) for c in r if c]).upper()
-                if any(x in row_text_r for x in ["C00", "C010", "WHEEL", "WHLC", "DSM", "PENAL"]):
+                if any(x in row_text_r for x in ["C00", "C010", "WHEEL", "WHLC", "DSM", "PENAL", "METER", "O&M"]):
                     table_header_rows = r_idx + 1
                     found_headers = True
                     # Map columns
@@ -120,9 +120,13 @@ def extract_abstract_rows(pdf):
                             if "WHEEL" in cell_clean: matched_label = "WHLC"
                             elif "DSM" in cell_clean: matched_label = "C010"
                             elif "PENAL" in cell_clean: matched_label = "C005"
-                            elif "METER RD" in cell_clean: matched_label = "C001"
+                            elif any(x in cell_clean for x in ["METER", "MET RD", "MET READING", "AMR"]): matched_label = "C001"
                             elif "O&M" in cell_clean: matched_label = "C002"
                             elif "TRANS" in cell_clean and "CHG" in cell_clean: matched_label = "C003"
+                            elif "SYSTEM" in cell_clean and "OP" in cell_clean: matched_label = "C004"
+                            elif "SLDC" in cell_clean: matched_label = "C007"
+                            elif "OTHER" in cell_clean: matched_label = "C008"
+                            elif "DISC" in cell_clean: matched_label = "C010"
                         
                         if matched_label:
                             # Standardize label
@@ -221,12 +225,7 @@ def extract_abstract_rows(pdf):
         # Check for specific codes (C001, C002, etc.) inside the column header
         matched = False
         for code, label in standard_labels.items():
-            # Flexible matching: handle zero-padding diffs (C005 vs C0005)
-            # Normalize e.g. C0005 -> C05 and C005 -> C05
-            code_min = re.sub(r'0+', '0', code)
-            col_min = re.sub(r'0+', '0', col_upper)
-            
-            if code in col_upper or code_min in col_min:
+            if code == col_upper or re.search(rf"\b{code}\b", col_upper):
                 col_name = label
                 matched = True
                 break
@@ -235,10 +234,18 @@ def extract_abstract_rows(pdf):
         if not matched:
             if "WHEEL" in col_upper:
                 col_name = standard_labels.get("WHLC", "Wheeling Charges")
-            elif "AMR" in col_upper:
+            elif any(x in col_upper for x in ["AMR", "METER", "MET RD", "MET READING"]):
                  col_name = standard_labels.get("C001", "C001- Meter Reading Charges")
             elif "DSM" in col_upper:
                  col_name = standard_labels.get("C010", "C010- DSM Charges")
+            elif "O&M" in col_upper:
+                 col_name = standard_labels.get("C002", "C002- O&M Charges")
+            elif "TRANS" in col_upper and "CHG" in col_upper:
+                 col_name = standard_labels.get("C003", "C003- Transmission Charges")
+            elif "SLDC" in col_upper:
+                 col_name = standard_labels.get("C007", "C007- SLDC Charges")
+            elif "PENAL" in col_upper:
+                 col_name = standard_labels.get("C005", "C005- RKvah Penalty")
         
         if col_name.upper() not in seen_cols:
             unique_columns.append(col_name)

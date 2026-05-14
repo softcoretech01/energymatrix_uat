@@ -71,9 +71,9 @@ type SolarRow = {
 
 
 const createInitialSolarRows = (labels: Record<string, string>): SolarRow[] => {
-    const chargeKeys = ['mrc', 'trc', 'oc1', 'kp', 'ec', 'shc', 'other', 'dc'];
+    const chargeKeys = ['mrc', 'omc', 'trc', 'oc1', 'kp', 'ec', 'shc', 'other', 'dc'];
     const chargeCodes: Record<string, string> = {
-        mrc: 'C001', trc: 'C003', oc1: 'C004', kp: 'C005',
+        mrc: 'C001', omc: 'C002', trc: 'C003', oc1: 'C004', kp: 'C005',
         ec: 'C006', shc: 'C007', other: 'C008', dc: 'C010'
     };
     return chargeKeys.map(key => ({
@@ -154,6 +154,7 @@ function EnergyAllotment() {
     // Dynamic Charge Names from Master
     const [chargeLabels, setChargeLabels] = useState<Record<string, string>>({
         mrc: "M.R.C",
+        omc: "O&M Charges",
         trc: "T.R.C",
         oc1: "O.C",
         kp: "K.P",
@@ -355,6 +356,7 @@ function EnergyAllotment() {
                         customer: String(saved.customer || "").trim(),
                         seNumber: String(saved.seNumber || "").trim(),
                         mrc: saved.mrc || 0,
+                        omc: saved.omc || 0,
                         trc: saved.trc || 0,
                         oc1: saved.oc1 || 0,
                         kp: saved.kp || 0,
@@ -370,6 +372,7 @@ function EnergyAllotment() {
                         customer: "",
                         seNumber: "",
                         mrc: wmCharges["C001"] || 0,
+                        omc: wmCharges["C002"] || 0,
                         trc: wmCharges["C003"] || 0,
                         oc1: wmCharges["C004"] || 0,
                         kp: wmCharges["C005"] || 0,
@@ -496,6 +499,7 @@ function EnergyAllotment() {
                     const currentLabels = { ...chargeLabels };
                     labelRes.data.forEach((item: any) => {
                         if (item.charge_code === 'C001') currentLabels.mrc = item.charge_name;
+                        if (item.charge_code === 'C002') currentLabels.omc = item.charge_name;
                         if (item.charge_code === 'C003') currentLabels.trc = item.charge_name;
                         if (item.charge_code === 'C004') currentLabels.oc1 = item.charge_name;
                         if (item.charge_code === 'C005') currentLabels.kp = item.charge_name;
@@ -559,9 +563,10 @@ function EnergyAllotment() {
                 console.log(`🔍 Solar Sync: Found charges for ${solarWm}:`, wmCharges);
 
                 let dynamicRows: SolarRow[] = [];
-                const excludedCodes = ['C002', 'C009', 'C011'];
+                const excludedCodes = ['C009', 'C011'];
                 const chargesToProcess = [
                     { charge_code: 'C001', charge_name: chargeLabels.mrc },
+                    { charge_code: 'C002', charge_name: chargeLabels.omc },
                     { charge_code: 'C003', charge_name: chargeLabels.trc },
                     { charge_code: 'C004', charge_name: chargeLabels.oc1 },
                     { charge_code: 'C005', charge_name: chargeLabels.kp },
@@ -578,6 +583,7 @@ function EnergyAllotment() {
 
                     let chargeKey = code.toLowerCase();
                     if (code === 'C001') chargeKey = 'mrc';
+                    else if (code === 'C002') chargeKey = 'omc';
                     else if (code === 'C003') chargeKey = 'trc';
                     else if (code === 'C004') chargeKey = 'oc1';
                     else if (code === 'C005') chargeKey = 'kp';
@@ -630,6 +636,7 @@ function EnergyAllotment() {
 
                     let chargeKey = code.toLowerCase();
                     if (code === 'C001') chargeKey = 'mrc';
+                    else if (code === 'C002') chargeKey = 'omc';
                     else if (code === 'C003') chargeKey = 'trc';
                     else if (code === 'C004') chargeKey = 'oc1';
                     else if (code === 'C005') chargeKey = 'kp';
@@ -1383,6 +1390,7 @@ function EnergyAllotment() {
                                 allotment_month: parseInt(selectedMonth),
                                 charges: {
                                     C001: row.mrc,
+                                    C002: row.omc,
                                     C003: row.trc,
                                     C004: row.oc1,
                                     C005: row.kp,
@@ -1424,6 +1432,7 @@ function EnergyAllotment() {
                         let code = row.chargeCode || "";
                         if (!code) {
                             if (row.chargeKey === 'mrc') code = 'C001';
+                            else if (row.chargeKey === 'omc') code = 'C002';
                             else if (row.chargeKey === 'trc') code = 'C003';
                             else if (row.chargeKey === 'oc1') code = 'C004';
                             else if (row.chargeKey === 'kp') code = 'C005';
@@ -1583,7 +1592,7 @@ function EnergyAllotment() {
                 ...newData[index],
                 customer,
                 seNumber: "",
-                mrc: 0, trc: 0, oc1: 0, kp: 0, ec: 0, shc: 0, other: 0, dc: 0
+                mrc: 0, omc: 0, trc: 0, oc1: 0, kp: 0, ec: 0, shc: 0, other: 0, dc: 0
             };
             return newData;
         });
@@ -1600,6 +1609,7 @@ function EnergyAllotment() {
                 ...row,
                 seNumber,
                 mrc: wmCharges["C001"] || 0,
+                omc: wmCharges["C002"] || 0,
                 trc: wmCharges["C003"] || 0,
                 oc1: wmCharges["C004"] || 0,
                 kp: wmCharges["C005"] || 0,
@@ -1878,7 +1888,7 @@ function EnergyAllotment() {
                                             </div>
                                         </div>
                                         <div className="text-[11px] font-bold text-indigo-600 pr-4 flex items-center gap-2">
-                                            {/* Borrowing logic removed */}
+                                            C1 ↔ C2 , C4 → C5
                                         </div>
                                     </div>
                                     {/* Top Scrollbar Sync */}
@@ -2265,7 +2275,7 @@ function EnergyAllotment() {
                                                                                     const getUP = (col: string) => {
                                                                                         const borrowKey = `${customer}|${seNumber}|${trimmedWM}|${col}`;
                                                                                         const slotBorrow = borrowedAmounts[borrowKey];
-                                                                                                                                                                                let up = 0;
+                                                                                        let up = 0;
                                                                                         if (slotBorrow) {
                                                                                             up += slotBorrow._own?.pp || 0;
                                                                                             Object.keys(slotBorrow).forEach(k => {
@@ -2273,7 +2283,7 @@ function EnergyAllotment() {
                                                                                             });
                                                                                         }
                                                                                         return Math.round(up);
-                                                    };
+                                                                                    };
                                                                                     return (
                                                                                         <React.Fragment key={wm}>
                                                                                             <TableCell className="p-1 border-r text-center text-[#B22222] font-semibold text-xs">{formatWithCommas(getUP('c1'))}</TableCell>
@@ -2315,7 +2325,7 @@ function EnergyAllotment() {
                                                                                         const borrowKey = `${customer}|${seNumber}|${trimmedWM}|${col}`;
                                                                                         const slotBorrow = borrowedAmounts[borrowKey];
                                                                                         if (!slotBorrow) return '-';
-                                                                                                                                                                                let ub = 0;
+                                                                                        let ub = 0;
                                                                                         ub += slotBorrow._own?.bank || 0;
                                                                                         Object.keys(slotBorrow).forEach(k => {
                                                                                             if (k !== '_own') ub += slotBorrow[k]?.bank || 0;
@@ -2419,6 +2429,7 @@ function EnergyAllotment() {
                                                         <TableHead className="py-2 h-10 font-semibold text-white whitespace-nowrap text-xs">Customer</TableHead>
                                                         <TableHead className="py-2 h-10 font-semibold text-white whitespace-nowrap text-xs">Service Number</TableHead>
                                                         <TableHead className="py-2 h-10 font-semibold text-white text-right whitespace-nowrap text-xs px-3">{chargeLabels.mrc}</TableHead>
+                                                        <TableHead className="py-2 h-10 font-semibold text-white text-right whitespace-nowrap text-xs px-3">{chargeLabels.omc}</TableHead>
                                                         <TableHead className="py-2 h-10 font-semibold text-white text-right whitespace-nowrap text-xs px-3">{chargeLabels.trc}</TableHead>
                                                         <TableHead className="py-2 h-10 font-semibold text-white text-right whitespace-nowrap text-xs px-3">{chargeLabels.oc1}</TableHead>
                                                         <TableHead className="py-2 h-10 font-semibold text-white text-right whitespace-nowrap text-xs px-3">{chargeLabels.kp}</TableHead>
@@ -2479,6 +2490,7 @@ function EnergyAllotment() {
                                                                     </Select>
                                                                 </TableCell>
                                                                 <TableCell className="p-1.5 border-r"><Input readOnly={!isEditing} className="h-8 text-right text-[11px] border-slate-200 shadow-none focus-visible:ring-1 bg-white text-black font-normal rounded-sm px-2" value={formatWithCommas(row.mrc)} onChange={(e) => handleChargeFieldChange(index, 'mrc', e.target.value)} /></TableCell>
+                                                                <TableCell className="p-1.5 border-r"><Input readOnly={!isEditing} className="h-8 text-right text-[11px] border-slate-200 shadow-none focus-visible:ring-1 bg-white text-black font-normal rounded-sm px-2" value={formatWithCommas(row.omc)} onChange={(e) => handleChargeFieldChange(index, 'omc', e.target.value)} /></TableCell>
                                                                 <TableCell className="p-1.5 border-r"><Input readOnly={!isEditing} className="h-8 text-right text-[11px] border-slate-200 shadow-none focus-visible:ring-1 bg-white text-black font-normal rounded-sm px-2" value={formatWithCommas(row.trc)} onChange={(e) => handleChargeFieldChange(index, 'trc', e.target.value)} /></TableCell>
                                                                 <TableCell className="p-1.5 border-r"><Input readOnly={!isEditing} className="h-8 text-right text-[11px] border-slate-200 shadow-none focus-visible:ring-1 bg-white text-black font-normal rounded-sm px-2" value={formatWithCommas(row.oc1)} onChange={(e) => handleChargeFieldChange(index, 'oc1', e.target.value)} /></TableCell>
                                                                 <TableCell className="p-1.5 border-r"><Input readOnly={!isEditing} className="h-8 text-right text-[11px] border-slate-200 shadow-none focus-visible:ring-1 bg-white text-black font-normal rounded-sm px-2" value={formatWithCommas(row.kp)} onChange={(e) => handleChargeFieldChange(index, 'kp', e.target.value)} /></TableCell>
@@ -2488,7 +2500,7 @@ function EnergyAllotment() {
                                                                 <TableCell className="p-1.5 border-r"><Input readOnly={!isEditing} className="h-8 text-right text-[11px] border-slate-200 shadow-none focus-visible:ring-1 bg-white text-black font-normal rounded-sm px-2" value={formatWithCommas(row.dc)} onChange={(e) => handleChargeFieldChange(index, 'dc', e.target.value)} /></TableCell>
                                                                 <TableCell className="p-1.5 border-r bg-slate-50 font-bold text-right text-[11px] pr-3 text-indigo-700">
                                                                     {formatWithCommas(
-                                                                        (Number(row.mrc) || 0) + (Number(row.trc) || 0) + (Number(row.oc1) || 0) +
+                                                                        (Number(row.mrc) || 0) + (Number(row.omc) || 0) + (Number(row.trc) || 0) + (Number(row.oc1) || 0) +
                                                                         (Number(row.kp) || 0) + (Number(row.ec) || 0) + (Number(row.shc) || 0) +
                                                                         (Number(row.other) || 0) + (Number(row.dc) || 0)
                                                                     )}
@@ -2501,6 +2513,7 @@ function EnergyAllotment() {
                                                     <TableRow className="h-10 hover:bg-slate-100/80">
                                                         <TableCell colSpan={3} className="text-xs font-bold text-slate-700 pl-3">Grand Total</TableCell>
                                                         <TableCell className="text-right text-[11px] font-bold pr-3 text-slate-900 border-r border-slate-200">{formatWithCommas(chargeAllocationRows.reduce((sum, r) => sum + (Number(r.mrc) || 0), 0))}</TableCell>
+                                                        <TableCell className="text-right text-[11px] font-bold pr-3 text-slate-900 border-r border-slate-200">{formatWithCommas(chargeAllocationRows.reduce((sum, r) => sum + (Number(r.omc) || 0), 0))}</TableCell>
                                                         <TableCell className="text-right text-[11px] font-bold pr-3 text-slate-900 border-r border-slate-200">{formatWithCommas(chargeAllocationRows.reduce((sum, r) => sum + (Number(r.trc) || 0), 0))}</TableCell>
                                                         <TableCell className="text-right text-[11px] font-bold pr-3 text-slate-900 border-r border-slate-200">{formatWithCommas(chargeAllocationRows.reduce((sum, r) => sum + (Number(r.oc1) || 0), 0))}</TableCell>
                                                         <TableCell className="text-right text-[11px] font-bold pr-3 text-slate-900 border-r border-slate-200">{formatWithCommas(chargeAllocationRows.reduce((sum, r) => sum + (Number(r.kp) || 0), 0))}</TableCell>
@@ -2510,7 +2523,7 @@ function EnergyAllotment() {
                                                         <TableCell className="text-right text-[11px] font-bold pr-3 text-slate-900 border-r border-slate-200">{formatWithCommas(chargeAllocationRows.reduce((sum, r) => sum + (Number(r.dc) || 0), 0))}</TableCell>
                                                         <TableCell className="text-right text-[11px] font-bold pr-3 bg-indigo-50 text-indigo-700">
                                                             {formatWithCommas(chargeAllocationRows.reduce((sum, r) => sum +
-                                                                (Number(r.mrc) || 0) + (Number(r.trc) || 0) + (Number(r.oc1) || 0) +
+                                                                (Number(r.mrc) || 0) + (Number(r.omc) || 0) + (Number(r.trc) || 0) + (Number(r.oc1) || 0) +
                                                                 (Number(r.kp) || 0) + (Number(r.ec) || 0) + (Number(r.shc) || 0) +
                                                                 (Number(r.other) || 0) + (Number(r.dc) || 0)
                                                                 , 0))}

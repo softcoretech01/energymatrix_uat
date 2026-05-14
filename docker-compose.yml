@@ -6,6 +6,8 @@ services:
     env_file:
       - ./PYTHON/.env
     # Allows backend to see the standalone MySQL container
+    volumes:
+      - ./PYTHON/uploads:/app/uploads
     extra_hosts:
       - "mysql_standalone:host-gateway"
     networks:
