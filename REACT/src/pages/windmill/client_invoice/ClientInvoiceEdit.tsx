@@ -119,7 +119,7 @@ export default function ClientInvoiceEdit() {
     const chargesKeys = [
         "Meter", "O&M Charges", "Transmsn Chrgs", "Sys Opr Chrgs",
         "RkvAh", "Import Chrgs", "Scheduling chrgs", "DSM Charges",
-        "Wheeling", "Self Generation Tax"
+        "Wheeling", "Other Charges", "Self Generation Tax"
     ];
     const totalCharges = chargesKeys.reduce((sum, key) => sum + (dMap[key]?.amount || 0), 0);
     const finalTotal = energyAmount - totalCharges;

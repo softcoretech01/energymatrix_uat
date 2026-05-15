@@ -42,12 +42,8 @@ const stripCommas = (val: string | number) => {
 };
 
 
-
-
 // Solar Data: 2 Customers, listed by SE Number
 const initialSolarData = [];
-
-
 
 type ChargeRow = {
     windmill: string;
@@ -297,10 +293,11 @@ function EnergyAllotment() {
             try {
                 const response = await api.get("/windmills/active-posted");
                 if (Array.isArray(response.data)) {
-                    const numbers = Array.from(new Set(response.data.map((item: any) => String(item.windmill_number || '').trim()))).filter(Boolean);
+                    const filteredData = response.data.filter((item: any) => String(item.type || '').toLowerCase() === 'windmill');
+                    const numbers = Array.from(new Set(filteredData.map((item: any) => String(item.windmill_number || '').trim()))).filter(Boolean);
                     if (numbers.length > 0) {
                         setWindmillNumbers(numbers);
-                        setWindmillsDetailed(response.data);
+                        setWindmillsDetailed(filteredData);
                         toast.success(`Fetched ${numbers.length} active windmills.`);
                     } else {
                         toast.warning("No active windmills found.");
@@ -1888,7 +1885,7 @@ function EnergyAllotment() {
                                             </div>
                                         </div>
                                         <div className="text-[11px] font-bold text-indigo-600 pr-4 flex items-center gap-2">
-                                            C1 ↔ C2 , C4 → C5
+                                            {/* Borrowing logic removed */}
                                         </div>
                                     </div>
                                     {/* Top Scrollbar Sync */}

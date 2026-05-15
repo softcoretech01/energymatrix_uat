@@ -313,12 +313,21 @@ async def get_invoice_print_data(
                 "calculation": f"Wheeling Charge = {eb_wheeling:,.2f}"
             })
 
+        # Ensure Other Charges exists
+        other_entry = next((d for d in row_copy["details"] if d["field_name"] == "Other Charges"), None)
+        if not other_entry:
+            row_copy["details"].append({
+                "field_name": "Other Charges", 
+                "amount": 0.0,
+                "calculation": "Default 0"
+            })
+
         # 4. Recalculate Total and Final Amount for display consistency
         d_map = {d["field_name"]: float(d["amount"]) for d in row_copy["details"]}
         charges_list = [
             "Meter", "O&M Charges", "Transmsn Chrgs", "Sys Opr Chrgs",
             "RkvAh", "Import Chrgs", "Scheduling chrgs", "DSM Charges",
-            "Wheeling", "Self Generation Tax"
+            "Wheeling", "Other Charges", "Self Generation Tax"
         ]
         total_charges = sum(d_map.get(c, 0) for c in charges_list)
         
@@ -407,6 +416,7 @@ async def get_invoice_details(invoice_id: int, user: dict = Depends(get_current_
                     ("Scheduling chrgs", "scheduling"),
                     ("DSM Charges", "dsm"),
                     ("Wheeling", "wheeling"),
+                    ("Other Charges", "other"),
                 ]
 
                 d_map = {}
@@ -483,6 +493,16 @@ async def get_invoice_details(invoice_id: int, user: dict = Depends(get_current_
                     rows = cursor.fetchall()
                     while cursor.nextset(): pass
 
+        # Ensure Other Charges exists
+        other_entry = next((r for r in rows if r["field_name"] == "Other Charges"), None)
+        if not other_entry:
+            rows = list(rows)
+            rows.append({
+                "field_name": "Other Charges",
+                "amount": 0.0,
+                "calculation": "Default 0"
+            })
+
         return {"status": "success", "data": rows}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -518,7 +538,7 @@ async def update_invoice_details(invoice_id: int, data: dict, user: dict = Depen
         charges_list = [
             "Meter", "O&M Charges", "Transmsn Chrgs", "Sys Opr Chrgs",
             "RkvAh", "Import Chrgs", "Scheduling chrgs", "DSM Charges",
-            "Wheeling", "Self Generation Tax"
+            "Wheeling", "Other Charges", "Self Generation Tax"
         ]
         total_charges = sum(d_map.get(c, 0) for c in charges_list)
         final_amount = net_units_value - total_charges

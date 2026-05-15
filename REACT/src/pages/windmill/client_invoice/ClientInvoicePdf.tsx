@@ -174,13 +174,14 @@ export default function ClientInvoicePdf() {
     const cSched = getCharge("Scheduling chrgs", Number(invoice.charge_scheduling) || 0);
     const cDSM = getCharge("DSM Charges", Number(invoice.charge_dsm) || 0);
     const cWheel = getCharge("Wheeling", Number(invoice.charge_wheeling) || 0);
+    const cOther = getCharge("Other Charges", 0);
     let cTax = getCharge("Self Generation Tax", Number(invoice.charge_tax) || 0);
     if (invoice.customer_name && invoice.customer_name.includes("L&T")) {
         cTax = { amount: 0, calculation: "Exempted for L&T" };
     }
 
     // Total charges to subtract
-    const totalCharges = cMeter.amount + cOM.amount + cTrans.amount + cSysOpr.amount + cRkvah.amount + cImport.amount + cSched.amount + cDSM.amount + cWheel.amount + cTax.amount;
+    const totalCharges = cMeter.amount + cOM.amount + cTrans.amount + cSysOpr.amount + cRkvah.amount + cImport.amount + cSched.amount + cDSM.amount + cWheel.amount + cOther.amount + cTax.amount;
 
     const displayAmount = energyAmount - totalCharges;
     const absDisplayAmount = Math.abs(displayAmount);
@@ -200,6 +201,7 @@ export default function ClientInvoicePdf() {
         { text: `(-) Scheduling chrgs = Rs.${formatAmount(cSched.amount)}`, calc: cSched.calculation },
         { text: `(-) DSM Charges = Rs.${formatAmount(cDSM.amount)}`, calc: cDSM.calculation },
         { text: `(-) Wheeling = Rs.${formatAmount(cWheel.amount)}`, calc: cWheel.calculation },
+        { text: `(-) Other Charges = Rs.${formatAmount(cOther.amount)}`, calc: cOther.calculation },
         { text: `(-) Self Generation Tax = Rs.${formatAmount(cTax.amount)}`, calc: cTax.calculation },
         { text: `Total = Rs.${formatAmount(totalCharges)}`, calc: dMap["Total"]?.calculation },
         { text: `Amount = Rs.${formatAmount(absDisplayAmount)}`, calc: undefined },
