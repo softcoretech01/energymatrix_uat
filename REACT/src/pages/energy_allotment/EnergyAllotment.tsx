@@ -293,11 +293,10 @@ function EnergyAllotment() {
             try {
                 const response = await api.get("/windmills/active-posted");
                 if (Array.isArray(response.data)) {
-                    const filteredData = response.data.filter((item: any) => String(item.type || '').toLowerCase() === 'windmill');
-                    const numbers = Array.from(new Set(filteredData.map((item: any) => String(item.windmill_number || '').trim()))).filter(Boolean);
+                    const numbers = Array.from(new Set(response.data.map((item: any) => String(item.windmill_number || '').trim()))).filter(Boolean);
                     if (numbers.length > 0) {
                         setWindmillNumbers(numbers);
-                        setWindmillsDetailed(filteredData);
+                        setWindmillsDetailed(response.data);
                         toast.success(`Fetched ${numbers.length} active windmills.`);
                     } else {
                         toast.warning("No active windmills found.");
@@ -345,7 +344,13 @@ function EnergyAllotment() {
                 savedWindmills = savedRes.data.windmill_charges || [];
             }
 
-            setChargeAllocationRows(windmillNumbers.map(wm => {
+            const wmNumbersForCharge = windmillsDetailed
+                .filter(w => String(w.type || '').toLowerCase() === 'windmill')
+                .map(w => String(w.windmill_number || '').trim())
+                .filter(Boolean);
+            const uniqueWmNumbers = Array.from(new Set(wmNumbersForCharge));
+
+            setChargeAllocationRows(uniqueWmNumbers.map(wm => {
                 const saved = savedWindmills.find((s: any) => String(s.windmill || '').trim() === String(wm).trim());
                 if (saved) {
                     return {
@@ -386,7 +391,7 @@ function EnergyAllotment() {
         } finally {
             setIsFetchingCharges(false);
         }
-    }, [selectedYear, selectedMonth, windmillNumbers]);
+    }, [selectedYear, selectedMonth, windmillNumbers, windmillsDetailed]);
 
     useEffect(() => {
         reloadWindmillCharges();
