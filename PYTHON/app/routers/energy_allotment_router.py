@@ -303,7 +303,7 @@ async def export_energy_allotment(
             JOIN masters.master_windmill mw ON h.windmill_id = mw.id
             LEFT JOIN masters.master_customers mc ON h.customer_id = mc.id
             LEFT JOIN masters.customer_service cs ON h.service_id = cs.id
-            WHERE h.year = %s AND h.month = %s AND h.status = '1' AND d.status = '1' AND LOWER(mw.type) = 'windmill'
+            WHERE h.year = %s AND h.month = %s AND h.status = '1' AND d.status = '1'
             GROUP BY h.allocation_id, mc.customer_name, cs.service_number, mw.windmill_number, h.year, h.month
             ORDER BY mc.customer_name, mw.windmill_number
         """
@@ -604,7 +604,6 @@ async def get_all_energy_allotments_by_month(
               AND h.month = %s
               AND h.status = '1'
               AND d.status = '1'
-              AND LOWER(mw.type) = 'windmill'
             GROUP BY h.customer_id, h.service_id, h.windmill_id,
                      mw.windmill_number, mc.customer_name, cs.service_number
             ORDER BY mw.windmill_number, mc.customer_name

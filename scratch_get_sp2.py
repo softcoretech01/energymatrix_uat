@@ -1,9 +1,7 @@
 import pymysql
 import os
 from dotenv import load_dotenv
-
 load_dotenv(dotenv_path="d:/DOWNLOADS/energymatrix_uat/PYTHON/.env")
-
 conn = pymysql.connect(
     host=os.getenv("DB_HOST", "localhost"),
     user=os.getenv("DB_USER", "root"),
