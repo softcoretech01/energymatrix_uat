@@ -1590,11 +1590,25 @@ function EnergyAllotment() {
     const handleChargeCustomerChange = (index: number, customer: string) => {
         setChargeAllocationRows(prev => {
             const newData = [...prev];
+            const seList = customerSEMap[customer] || [];
+            const defaultSE = seList.length === 1 ? seList[0] : "";
+            
+            const wm = newData[index].windmill;
+            const wmCharges = defaultSE ? (fetchedChargesSummary[wm] || {}) : {};
+
             newData[index] = {
                 ...newData[index],
                 customer,
-                seNumber: "",
-                mrc: 0, omc: 0, trc: 0, oc1: 0, kp: 0, ec: 0, shc: 0, other: 0, dc: 0
+                seNumber: defaultSE,
+                mrc: defaultSE ? (wmCharges["C001"] || 0) : 0,
+                omc: defaultSE ? (wmCharges["C002"] || 0) : 0,
+                trc: defaultSE ? (wmCharges["C003"] || 0) : 0,
+                oc1: defaultSE ? (wmCharges["C004"] || 0) : 0,
+                kp: defaultSE ? (wmCharges["C005"] || 0) : 0,
+                ec: defaultSE ? (wmCharges["C006"] || 0) : 0,
+                shc: defaultSE ? (wmCharges["C007"] || 0) : 0,
+                other: defaultSE ? (wmCharges["C008"] || 0) : 0,
+                dc: defaultSE ? (wmCharges["C010"] || 0) : 0,
             };
             return newData;
         });
@@ -1650,13 +1664,33 @@ function EnergyAllotment() {
         const parts = cleanValue.split('.');
         const finalValue = parts.length > 2 ? `${parts[0]}.${parts.slice(1).join('')}` : cleanValue;
 
-        newData[index] = { ...newData[index], value: finalValue };
+        const targetRow = newData[index];
+        const chargeCode = targetRow.chargeCode;
+        const systemValue = targetRow.systemValue || 0;
+
+        // Calculate other allocations for the same charge code
+        const otherAllocationsSum = newData
+            .filter((r, i) => r.chargeCode === chargeCode && i !== index)
+            .reduce((sum, r) => sum + (parseFloat(String(r.value)) || 0), 0);
+
+        const maxAllowed = Math.max(0, systemValue - otherAllocationsSum);
+        const parsedVal = parseFloat(finalValue);
+
+        if (!isNaN(parsedVal) && parsedVal > maxAllowed) {
+            newData[index] = { ...newData[index], value: maxAllowed };
+            toast.warning(`Maximum allocation allowed is ${formatWithCommas(maxAllowed)}`);
+        } else {
+            newData[index] = { ...newData[index], value: finalValue };
+        }
+
         setSolarAllocationRows(newData);
     };
 
     const handleSolarCustomerChange = (index: number, customer: string) => {
         const newData = [...solarAllocationRows];
-        newData[index] = { ...newData[index], customer, seNumber: "" };
+        const seList = customerSEMap[customer] || [];
+        const defaultSE = seList.length === 1 ? seList[0] : "";
+        newData[index] = { ...newData[index], customer, seNumber: defaultSE };
         setSolarAllocationRows(newData);
     };
 
