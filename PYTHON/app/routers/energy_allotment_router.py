@@ -182,6 +182,69 @@ async def save_solar_allotment(payload: dict, user: dict = Depends(get_current_u
         if conn: conn.close()
 
 # -------------------------------------------------------
+# SOLAR CHARGE ALLOTMENT DELETE
+# -------------------------------------------------------
+@router.post("/solar-allotment/delete")
+async def delete_solar_allotment(payload: dict, user: dict = Depends(get_current_user)):
+    conn = None
+    cursor = None
+    try:
+        conn = get_connection(db_name="windmill")
+        cursor = conn.cursor()
+
+        customer_id = payload.get("customer_id")
+        solar_id = payload.get("solar_id")
+        service_id = payload.get("service_id")
+        year = payload.get("allotment_year")
+        month = payload.get("allotment_month")
+        charge_code = payload.get("charge_code")
+
+        # 1. Resolve header_id
+        header_query = """
+            SELECT id FROM windmill.solar_charge_allotment_header
+            WHERE customer_id = %s AND solar_id = %s AND service_id = %s AND year = %s AND month = %s
+        """
+        cursor.execute(header_query, (customer_id, solar_id, service_id, year, month))
+        header_row = cursor.fetchone()
+        
+        if not header_row:
+            return {"status": "success", "message": "No matching header record found to delete"}
+            
+        header_id = header_row[0]
+
+        # 2. Resolve charge_id
+        charge_query = "SELECT id FROM masters.master_consumption_chargers WHERE charge_code = %s"
+        cursor.execute(charge_query, (charge_code,))
+        charge_row = cursor.fetchone()
+        
+        if charge_row:
+            charge_id = charge_row[0]
+            # Delete from details
+            delete_detail = "DELETE FROM windmill.solar_charge_allotment_details WHERE header_id = %s AND charge_id = %s"
+            cursor.execute(delete_detail, (header_id, charge_id))
+
+        # 3. Check if any details remain for this header
+        check_details = "SELECT COUNT(*) FROM windmill.solar_charge_allotment_details WHERE header_id = %s"
+        cursor.execute(check_details, (header_id,))
+        details_count = cursor.fetchone()[0]
+
+        if details_count == 0:
+            # Delete header if no details remain
+            delete_header = "DELETE FROM windmill.solar_charge_allotment_header WHERE id = %s"
+            cursor.execute(delete_header, (header_id,))
+
+        conn.commit()
+        return {"status": "success", "message": "Solar charge allotment deleted successfully"}
+
+    except Exception as e:
+        if conn: conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if cursor: cursor.close()
+        if conn: conn.close()
+
+
+# -------------------------------------------------------
 # ALLOTMENT ORDER UPLOAD & LIST
 # -------------------------------------------------------
 @router.post("/allotment-order/upload")

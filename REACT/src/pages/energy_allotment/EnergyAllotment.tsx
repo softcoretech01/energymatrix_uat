@@ -1716,7 +1716,37 @@ function EnergyAllotment() {
         });
     };
 
-    const removeSolarSplitRow = (index: number) => {
+    const removeSolarSplitRow = async (index: number) => {
+        const row = solarAllocationRows[index];
+
+        const match = fullCustomerData.find(c => {
+            const dbCust = String(c.customer_name || c.customer || "").trim();
+            const dbSE = String(c.service_number || c.sc_number || "").trim();
+            const rowCust = String(row.customer || "").trim();
+            const rowSE = String(row.seNumber || "").trim();
+            return dbCust === rowCust && dbSE === rowSE;
+        });
+
+        const solarWm = solarWindmills[0];
+
+        if (match && solarWm && row.customer && row.seNumber) {
+            try {
+                await api.post("/windmills/solar-allotment/delete", {
+                    customer_id: match.id || match.customer_id || 0,
+                    solar_id: solarWm.id || 0,
+                    service_id: match.service_id || 0,
+                    allotment_year: parseInt(selectedYear),
+                    allotment_month: parseInt(selectedMonth),
+                    charge_code: row.chargeCode
+                });
+                toast.success("Allocation removed successfully.");
+            } catch (error) {
+                console.error("Error deleting solar allotment:", error);
+                toast.error("Failed to delete allocation from database.");
+                return;
+            }
+        }
+
         const newRows = solarAllocationRows.filter((_, i) => i !== index);
         setSolarAllocationRows(newRows);
     };
