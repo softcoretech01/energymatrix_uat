@@ -876,8 +876,9 @@ function EnergyAllotment() {
                     const takePartBank = Math.min(remainingToAllot, partBank);
                     remainingToAllot -= takePartBank;
 
-                    newSummary[wm][`${partner}_pp`] = partPP - takePartPP;
-                    newSummary[wm][`${partner}_bank`] = partBank - takePartBank;
+                    // Borrowing must not affect the partner's P: and B: balances (only Balance Allocation)
+                    // newSummary[wm][`${partner}_pp`] = partPP - takePartPP;
+                    // newSummary[wm][`${partner}_bank`] = partBank - takePartBank;
 
                     slotInfo[partner] = { pp: takePartPP, bank: takePartBank };
                 }
@@ -1275,12 +1276,13 @@ function EnergyAllotment() {
                                     let availPartPP = (parseFloat(runningBalance[wm]?.[`${partner}_pp`]) || 0);
                                     usePartPP = Math.min(rem, availPartPP);
                                     rem -= usePartPP;
-                                    if (runningBalance[wm]) runningBalance[wm][`${partner}_pp`] = availPartPP - usePartPP;
+                                    // Borrowing must not affect the partner's P: and B: balances (only Balance Allocation)
+                                    // if (runningBalance[wm]) runningBalance[wm][`${partner}_pp`] = availPartPP - usePartPP;
 
                                     let availPartBN = (parseFloat(runningBalance[wm]?.[`${partner}_bank`]) || 0);
                                     usePartBN = Math.min(rem, availPartBN);
                                     rem -= usePartBN;
-                                    if (runningBalance[wm]) runningBalance[wm][`${partner}_bank`] = availPartBN - usePartBN;
+                                    // if (runningBalance[wm]) runningBalance[wm][`${partner}_bank`] = availPartBN - usePartBN;
                                 }
 
                                 splitValues[`${slot}_power`] = useOwnPP + usePartPP;
