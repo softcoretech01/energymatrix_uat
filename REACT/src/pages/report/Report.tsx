@@ -29,6 +29,8 @@ interface WindmillRecord {
     utilizedBanking: number;
     addedBanking: number;
     balance: number;
+    transmissionLoss: number;
+    bankingLoss: number;
 }
 
 interface MonthlyData {
@@ -44,6 +46,8 @@ export default function BankReport() {
 
     const [selectedYear, setSelectedYear] = useState<string>(currentYear.toString());
     const [windmills, setWindmills] = useState<string[]>([]);
+    const [windmillLossesMap, setWindmillLossesMap] = useState<Record<string, number>>({});
+    const [globalBankingLoss, setGlobalBankingLoss] = useState<number>(0);
     const [isLoading, setIsLoading] = useState<boolean>(true);
     const [selectedWindmillFilter, setSelectedWindmillFilter] = useState<string>("all");
     const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>("all");
@@ -64,6 +68,15 @@ export default function BankReport() {
             try {
                 const response = await api.get("/windmills/active-posted");
                 if (Array.isArray(response.data)) {
+                    const losses: Record<string, number> = {};
+                    response.data.forEach((item: any) => {
+                        const wmNum = String(item.windmill_number || "").trim();
+                        if (wmNum) {
+                            losses[wmNum] = Number(item.transmission_loss || 0);
+                        }
+                    });
+                    setWindmillLossesMap(losses);
+
                     const numbers = Array.from(
                         new Set(
                             response.data
@@ -94,6 +107,9 @@ export default function BankReport() {
             try {
                 const response = await api.get(`/banking/utilized?year=${selectedYear}`);
                 if (Array.isArray(response.data)) {
+                    if (response.data.length > 0) {
+                        setGlobalBankingLoss(Number(response.data[0].banking_loss || 0));
+                    }
                     const dataMap: Record<string, {
                         total: number;
                         c1: number;
@@ -224,8 +240,20 @@ export default function BankReport() {
                 // Balance of one month is Banking of next month.
                 // Capped at 0 since banked units cannot go below 0.
                 const slotUtilizedBanking = slotUtilized > slotPowerplant ? slotUtilized - slotPowerplant : 0;
-                const slotAddedBanking = slotPowerplant > slotUtilized ? slotPowerplant - slotUtilized : 0;
-                const slotBalance = slotBanking - slotUtilizedBanking + slotAddedBanking;
+                const slotAddedBankingOriginal = slotPowerplant > slotUtilized ? slotPowerplant - slotUtilized : 0;
+                const transmissionLoss = windmillLossesMap[wmNumber] || 0;
+                const bankingLoss = globalBankingLoss;
+                
+                // Calculate transmission loss and banking loss as percentages of the surplus (Added banking)
+                const slotAddedBanking = parseFloat(
+                    (
+                        slotAddedBankingOriginal +
+                        (slotAddedBankingOriginal * transmissionLoss) / 100 -
+                        (slotAddedBankingOriginal * bankingLoss) / 100
+                    ).toFixed(2)
+                );
+                
+                const slotBalance = parseFloat((slotBanking - slotUtilizedBanking + slotAddedBanking).toFixed(2));
 
                 // Update running balance for next month's banking
                 runningBalances[balanceKey] = slotBalance;
@@ -239,6 +267,8 @@ export default function BankReport() {
                     utilizedBanking: slotUtilizedBanking,
                     addedBanking: slotAddedBanking,
                     balance: slotBalance,
+                    transmissionLoss,
+                    bankingLoss,
                 };
             });
         });
@@ -575,6 +605,10 @@ export default function BankReport() {
                                                         const count = group.records.filter(r => r.windmillNumber === row.windmillNumber).length;
                                                         const isFirst = index === firstIdx;
 
+                                                        const baseSurplus = row.powerplant > row.utilized ? row.powerplant - row.utilized : 0;
+                                                        const transLossUnits = parseFloat(((baseSurplus * row.transmissionLoss) / 100).toFixed(2));
+                                                        const bankLossUnits = parseFloat(((baseSurplus * row.bankingLoss) / 100).toFixed(2));
+
                                                         return (
                                                             <TableRow
                                                                 key={index}
@@ -619,7 +653,7 @@ export default function BankReport() {
                                                                 </TableCell>
                                                                 <TableCell
                                                                     className={`py-2.5 px-4 text-right border-b border-slate-200 border-r border-slate-200 ${row.addedBanking < 0 ? "text-red-600" : "text-black"}`}
-                                                                    title={`Surplus: Powerplant (${row.powerplant.toLocaleString()}) - Total Utilized (${row.utilized.toLocaleString()}) = ${row.addedBanking.toLocaleString()}`}
+                                                                    title={`Surplus Base: Powerplant (${row.powerplant.toLocaleString()}) - Total Utilized (${row.utilized.toLocaleString()}) = ${baseSurplus.toLocaleString()}\nTransmission Loss (+${row.transmissionLoss}%): +${transLossUnits.toLocaleString()}\nBanking Loss (-${row.bankingLoss}%): -${bankLossUnits.toLocaleString()}\nAdded Banking = ${row.addedBanking.toLocaleString()}`}
                                                                 >
                                                                     {row.addedBanking.toLocaleString()}
                                                                 </TableCell>
