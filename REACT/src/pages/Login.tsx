@@ -6,8 +6,8 @@ import { toast } from "sonner";
 
 export default function Login() {
   const navigate = useNavigate();
-  const [username, setUsername] = useState("admin");
-  const [password, setPassword] = useState("admin123");
+  const [username, setUsername] = useState("Vision");
+  const [password, setPassword] = useState("umats");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 

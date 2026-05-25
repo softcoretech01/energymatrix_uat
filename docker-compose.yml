@@ -23,6 +23,7 @@ services:
       - "80:80"
       - "443:443"
     volumes:
+      - /var/www/Softcoretechweb:/usr/share/nginx/html/softcoretech:ro
       - ./REACT/dist:/usr/share/nginx/html/energymatrix/uat
       - /var/www/energymatrix_qa/REACT/dist:/usr/share/nginx/html/energymatrix/qa
       - /var/www/resolvex/static:/usr/share/nginx/html/resolvex/static
@@ -34,6 +35,7 @@ services:
       - ./nginx:/etc/nginx/conf.d:ro
       - /etc/letsencrypt:/etc/letsencrypt:ro
       - /var/www/html:/var/www/html
+      - /var/www/Tradeware/react/dist:/usr/share/nginx/html/tradeware:ro
     depends_on:
       - backend
     networks:
