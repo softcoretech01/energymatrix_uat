@@ -33,6 +33,7 @@ from app.routers.audit_router import router as audit_router
 from app.routers.error_log_router import router as error_log_router
 from app.routers.session_router import router as session_router
 from app.routers.login_log_router import router as login_log_router
+from app.routers.banking_router import router as banking_router
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("Running database initialization on startup...")
@@ -131,5 +132,6 @@ app.include_router(audit_router, prefix="/api", dependencies=auth_dep)
 app.include_router(error_log_router, prefix="/api")
 app.include_router(session_router, prefix="/api", dependencies=auth_dep)
 app.include_router(login_log_router, prefix="/api", dependencies=auth_dep)
+app.include_router(banking_router, prefix="/api", dependencies=auth_dep)
 
 

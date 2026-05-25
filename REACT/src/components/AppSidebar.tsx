@@ -194,6 +194,18 @@ export function AppSidebar() {
             ]
         },
         {
+            title: "Reports",
+            url: "#",
+            icon: FileText,
+            items: [
+                {
+                    title: "Banking",
+                    url: "/reports/banking",
+                    icon: CreditCard,
+                },
+            ]
+        },
+        {
             title: "Logs",
             url: "#",
             icon: ShieldCheck,
@@ -303,7 +315,7 @@ export function AppSidebar() {
                                                             )}
                                                         >
                                                             <Link to={subItem.url} className="flex items-center gap-3" onClick={() => {
-                                                                if (subItem.title === "Energy Allotment") {
+                                                                if (subItem.title === "Energy Allotment" || subItem.title === "Banking") {
                                                                     setOpen(false);
                                                                 }
                                                             }}>
@@ -343,7 +355,7 @@ export function AppSidebar() {
                         </SidebarMenuItem>
                     </SidebarMenu>
                     <div className="px-4 py-2 text-xs text-sidebar-foreground/70 text-center group-data-[collapsible=icon]:hidden">
-                        version 1.1.27
+                        version 1.1.28
                     </div>
                 </SidebarGroup>
             </SidebarContent>

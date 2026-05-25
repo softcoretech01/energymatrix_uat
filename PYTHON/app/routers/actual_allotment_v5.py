@@ -80,12 +80,39 @@ def extract_actual_allotment_data(pdf_path: str) -> dict:
                     consumer_no = str(row[2]).strip() if len(row) > 2 and row[2] else ""
                     if not consumer_no: continue
                     if service_no: pdf_service_nos.add(service_no)
+                    
                     try:
                         raw = str(row[adjusted_total_col]).replace(",", "").strip()
                         allotment_total = float(raw) if raw else 0.0
                     except:
                         allotment_total = 0.0
-                    allotments.append({"service_no": service_no, "consumer_no": consumer_no, "allotment_total": allotment_total})
+
+                    try:
+                        c1 = str(row[adjusted_total_col - 5]).replace(",", "").strip()
+                    except:
+                        c1 = "0"
+                    try:
+                        c2 = str(row[adjusted_total_col - 4]).replace(",", "").strip()
+                    except:
+                        c2 = "0"
+                    try:
+                        c4 = str(row[adjusted_total_col - 2]).replace(",", "").strip()
+                    except:
+                        c4 = "0"
+                    try:
+                        c5 = str(row[adjusted_total_col - 1]).replace(",", "").strip()
+                    except:
+                        c5 = "0"
+
+                    allotments.append({
+                        "service_no": service_no,
+                        "consumer_no": consumer_no,
+                        "allotment_total": allotment_total,
+                        "c1": c1,
+                        "c2": c2,
+                        "c4": c4,
+                        "c5": c5
+                    })
 
     return {
         "allotments": allotments,
@@ -182,6 +209,10 @@ async def upload_actual_allotment(
         for item in allotments:
             consumer_no = item["consumer_no"]
             allotment_total = item["allotment_total"]
+            c1 = item.get("c1", "0")
+            c2 = item.get("c2", "0")
+            c4 = item.get("c4", "0")
+            c5 = item.get("c5", "0")
             
             # Resolve service_id via SP
             cursor.callproc("sp_get_service_id_by_consumer_no", (consumer_no,))
@@ -191,7 +222,10 @@ async def upload_actual_allotment(
             if row:
                 service_id = row[0] if isinstance(row, tuple) else row.get("id")
                 if service_id is not None:
-                    ActualAllotment.save_allotment(cursor, windmill_id, service_id, allotment_total, year, month, file_path, user["id"])
+                    ActualAllotment.save_allotment(
+                        cursor, windmill_id, service_id, allotment_total, year, month, file_path, user["id"],
+                        c1, c2, c4, c5
+                    )
                     parsed_count += 1
                 else:
                     unmatched.append(consumer_no)
@@ -314,7 +348,7 @@ async def get_reconciliation_details(client_eb_id: int):
         
         # 2. Get manual allotment totals from actual_allotment table
         cursor.execute("""
-            SELECT mw.windmill_number, mw.windmill_name, aa.allotment_total, aa.pdf_file_path
+            SELECT mw.windmill_number, mw.windmill_name, aa.allotment_total, aa.pdf_file_path, aa.c1, aa.c2, aa.c4, aa.c5
             FROM actual_allotment aa
             JOIN masters.master_windmill mw ON aa.windmill_id = mw.id
             WHERE aa.year = %s AND aa.month = %s AND aa.service_id = %s
@@ -324,10 +358,33 @@ async def get_reconciliation_details(client_eb_id: int):
             str(row['windmill_number']): {
                 "windmill_name": row.get('windmill_name') or "",
                 "total": float(row['allotment_total'] or 0), 
-                "is_uploaded": bool(row['pdf_file_path'])
+                "is_uploaded": bool(row['pdf_file_path']),
+                "c1": str(row.get('c1') or "0"),
+                "c2": str(row.get('c2') or "0"),
+                "c4": str(row.get('c4') or "0"),
+                "c5": str(row.get('c5') or "0"),
             } 
             for row in manual_rows
         }
+
+        # 2b. Fetch system allocated slots from energy_allotment_details
+        cursor.execute("""
+            SELECT mw.windmill_number, ead.slot, ead.allocated
+            FROM energy_allotment_details ead
+            JOIN energy_allotment_header eah ON ead.allocation_id = eah.allocation_id
+            JOIN masters.master_windmill mw ON eah.windmill_id = mw.id
+            WHERE eah.year = %s AND eah.month = %s AND eah.service_id = %s
+        """, (b_year, b_month, s_id))
+        sys_allotment_rows = cursor.fetchall()
+        
+        sys_allotments_map = {}
+        for r in sys_allotment_rows:
+            wm_num = str(r['windmill_number'])
+            slot_name = str(r['slot']).lower() # c1, c2, c3, c4, c5
+            allocated_val = float(r['allocated'] or 0)
+            if wm_num not in sys_allotments_map:
+                sys_allotments_map[wm_num] = {}
+            sys_allotments_map[wm_num][slot_name] = allocated_val
 
         # ✅ Get windmill types and wheeling charge configurations
         cursor.execute("SELECT windmill_number, type FROM masters.master_windmill")
@@ -336,12 +393,18 @@ async def get_reconciliation_details(client_eb_id: int):
         cursor.execute("SELECT energy_type, cost, discount_charges FROM masters.master_consumption_chargers WHERE charge_code = 'C009'")
         rate_map = {r["energy_type"].lower(): float(r["cost"] or 0) * (float(r["discount_charges"] or 0) / 100.0) for r in cursor.fetchall()}
 
+        def safe_float(val):
+            try:
+                return float(str(val).replace(",", "").strip())
+            except:
+                return 0.0
+
         # 3. Combine data
         all_windmills = sorted([wm for wm in set(system_charges.keys()).union(set(manual_map.keys())) if wm and wm != 'None'])
         comparison = []
         for wm in all_windmills:
             sys_data = system_charges.get(wm, {"calculated_value": 0.0, "original_charges": 0.0, "windmill_name": ""})
-            man_data = manual_map.get(wm, {"total": 0.0, "is_uploaded": False, "windmill_name": ""})
+            man_data = manual_map.get(wm, {"total": 0.0, "is_uploaded": False, "windmill_name": "", "c1": "0", "c2": "0", "c4": "0", "c5": "0"})
             
             orig_charges = sys_data["original_charges"]
             sys_val = sys_data["calculated_value"]
@@ -357,6 +420,9 @@ async def get_reconciliation_details(client_eb_id: int):
             man_val = man_data["total"]
             is_uploaded = man_data["is_uploaded"]
             
+            # Fetch slot values
+            sys_slots = sys_allotments_map.get(wm, {})
+            
             comparison.append({
                 "windmill": wm, 
                 "windmill_name": wm_name,
@@ -364,7 +430,25 @@ async def get_reconciliation_details(client_eb_id: int):
                 "original_wheeling_charges": orig_charges,
                 "manual_adjusted_total": man_val,
                 "is_uploaded": is_uploaded,
-                "status": 'Matched' if abs(sys_val - man_val) < 0.0001 else 'Mismatched'
+                "status": 'Matched' if abs(sys_val - man_val) < 0.0001 else 'Mismatched',
+                "slots": {
+                    "c1": {
+                        "system": sys_slots.get("c1", 0.0),
+                        "manual": safe_float(man_data.get("c1"))
+                    },
+                    "c2": {
+                        "system": sys_slots.get("c2", 0.0),
+                        "manual": safe_float(man_data.get("c2"))
+                    },
+                    "c4": {
+                        "system": sys_slots.get("c4", 0.0),
+                        "manual": safe_float(man_data.get("c4"))
+                    },
+                    "c5": {
+                        "system": sys_slots.get("c5", 0.0),
+                        "manual": safe_float(man_data.get("c5"))
+                    }
+                }
             })
 
         month_names = ["January","February","March","April","May","June","July","August","September","October","November","December"]

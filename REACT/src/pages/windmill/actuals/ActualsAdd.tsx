@@ -110,9 +110,10 @@ export default function ActualsAdd() {
 
             if (res.status === 200) {
                 toast.success(`Success: Processed ${res.data.parsed_count} records from ${selectedFile.name}`);
-                setTimeout(() => {
-                    navigate("/windmill/actuals");
-                }, 1500);
+                setSelectedFile(null);
+                if (fileInputRef.current) {
+                    fileInputRef.current.value = "";
+                }
             }
         } catch (err: any) {
             console.error("Upload failed", err);

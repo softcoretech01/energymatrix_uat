@@ -261,6 +261,11 @@ class ActualAllotment(Base):
     month = Column(Integer, nullable=False)
     pdf_file_path = Column(String(500))
     
+    c1 = Column(String(255))
+    c2 = Column(String(255))
+    c4 = Column(String(255))
+    c5 = Column(String(255))
+    
     # Audit fields
     created_by = Column(Integer)
     created_at = Column(DateTime, default=func.now())
@@ -268,10 +273,10 @@ class ActualAllotment(Base):
     modified_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
     @staticmethod
-    def save_allotment(cursor, windmill_id, service_id, allotment_total, year, month, pdf_path, user_id):
+    def save_allotment(cursor, windmill_id, service_id, allotment_total, year, month, pdf_path, user_id, c1=None, c2=None, c4=None, c5=None):
         cursor.callproc(
             "sp_save_actual_allotment",
-            (windmill_id, service_id, allotment_total, year, month, pdf_path, user_id)
+            (windmill_id, service_id, allotment_total, year, month, pdf_path, user_id, c1, c2, c4, c5)
         )
 
     @staticmethod

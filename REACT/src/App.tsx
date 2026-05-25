@@ -168,7 +168,7 @@ const App = () => (
               <Route path="/eb-statement-solar/edit/:id" element={<EBStatementSolarEdit />} />
               <Route path="/eb-statement-solar/pdf" element={<EBStatementSolarPdf />} />
               <Route path="/eb-statement-solar/comparison" element={<EBSolarChargeComparison />} />
-              <Route path="/bank-report" element={<BankReport />} />
+              <Route path="/reports/banking" element={<BankReport />} />
               <Route path="/consumption-bank-report" element={<Navigate to="/forecast-report" replace />} />
               <Route path="/forecast-report" element={<ForecastReport />} />
               <Route path="/billing-bank-report" element={<BillingBankReport />} />

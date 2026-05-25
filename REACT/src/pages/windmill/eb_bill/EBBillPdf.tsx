@@ -62,7 +62,7 @@ export default function EBBillPdf() {
 
             console.log("Saving EB Bill with payload:", payload);
             const res = await api.post("/eb-bill/save-all", payload);
-            
+
             if (res.status === 200 && res.data?.status === "success") {
                 alert("✓ EB Bill details saved successfully!");
                 // Clear session storage and navigate
@@ -117,7 +117,7 @@ export default function EBBillPdf() {
 
                 <div className="border-b-2 border-slate-100 pb-8 mb-10">
                     <h1 className="text-center font-extrabold text-4xl text-slate-900 tracking-tight uppercase">
-                        Energy Allotment Order Charges
+                        Client EB Bill
                     </h1>
                 </div>
 
