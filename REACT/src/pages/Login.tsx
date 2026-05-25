@@ -7,7 +7,7 @@ import { toast } from "sonner";
 export default function Login() {
   const navigate = useNavigate();
   const [username, setUsername] = useState("Vision");
-
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
@@ -36,7 +36,7 @@ export default function Login() {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username }),
+          body: JSON.stringify({ username, password }),
         }
       );
 
@@ -90,6 +90,21 @@ export default function Login() {
               onChange={(e) => setUsername(e.target.value)}
               className="w-full border border-gray-300 text-gray-900 placeholder-gray-400"
               placeholder="Enter your username"
+              required
+              disabled={isLoading}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2 text-gray-700">
+              Password
+            </label>
+            <Input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full border border-gray-300 text-gray-900 placeholder-gray-400"
+              placeholder="Enter your password"
               required
               disabled={isLoading}
             />
