@@ -7,7 +7,7 @@ import { toast } from "sonner";
 export default function Login() {
   const navigate = useNavigate();
   const [username, setUsername] = useState("Vision");
-  const [password, setPassword] = useState("umats");
+
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
@@ -36,7 +36,7 @@ export default function Login() {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username, password }),
+          body: JSON.stringify({ username }),
         }
       );
 
@@ -48,7 +48,7 @@ export default function Login() {
         if (data.user) {
           localStorage.setItem("user", JSON.stringify(data.user));
         }
-        
+
         toast.success("Login successful!");
         // Navigate to dashboard
         navigate("/master/transmission-loss", { replace: true });
@@ -72,7 +72,7 @@ export default function Login() {
         <div className="text-center mb-8">
           <h2 className="text-4xl font-bold mb-2" style={{ color: "hsl(189 79% 27%)" }}>EnergyMatrix</h2>
         </div>
-        
+
         {error && (
           <div className="text-red-600 mb-4 p-3 bg-red-50 rounded border border-red-200">
             {error}
@@ -95,23 +95,8 @@ export default function Login() {
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium mb-2 text-gray-700">
-              Password
-            </label>
-            <Input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full border border-gray-300 text-gray-900 placeholder-gray-400"
-              placeholder="Enter your password"
-              required
-              disabled={isLoading}
-            />
-          </div>
-
-          <Button 
-            type="submit" 
+          <Button
+            type="submit"
             className="w-full text-white font-semibold py-2 rounded"
             style={{ backgroundColor: "hsl(189 79% 27%)" }}
             onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "hsl(189 79% 22%)")}
