@@ -2,6 +2,8 @@ import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { format } from "date-fns";
 
+import { globalStripSeparators } from "@/contexts/NumberFormatContext";
+
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
@@ -33,9 +35,13 @@ export function formatDate(value: string | Date | number | null | undefined): st
   return format(date, "dd-MMM-yyyy");
 }
 
+export function stripSeparators(value: string | number | null | undefined): string {
+  return globalStripSeparators(value);
+}
+
 export function formatNumber(value: number | string | null | undefined): string {
   if (value === null || value === undefined || value === "") return "0";
-  const num = typeof value === "string" ? parseFloat(value.replace(/,/g, "")) : value;
+  const num = typeof value === "string" ? parseFloat(stripSeparators(value)) : value;
   if (isNaN(num)) return "0";
-  return new Intl.NumberFormat('en-IN').format(num);
+  return new Intl.NumberFormat().format(num);
 }

@@ -11,6 +11,7 @@ class TotalSharesCreate(BaseModel):
     investor_shares: int
     status: Optional[str] = "Active"
     is_submitted: Optional[int] = 0
+    number_format_id: Optional[int] = None
 
 
 # ===============================
@@ -21,6 +22,7 @@ class TotalSharesUpdate(BaseModel):
     investor_shares: int
     status: Optional[str] = "Active"
     is_submitted: Optional[int] = 0
+    number_format_id: Optional[int] = None
 
 
 # ===============================
@@ -31,6 +33,7 @@ class TotalSharesResponse(BaseModel):
     total_company_shares: Optional[float] = 0.0
     total_investor_shares: Optional[float] = 0.0
     total_customer_shares: Optional[float] = 0.0
+    number_format_id: Optional[int] = None
 
 
 # ===============================

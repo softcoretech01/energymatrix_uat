@@ -18,7 +18,11 @@ BEGIN
         SUM(pp_c1) as pp_c1,
         SUM(pp_c2) as pp_c2,
         SUM(pp_c4) as pp_c4,
-        SUM(pp_c5) as pp_c5
+        SUM(pp_c5) as pp_c5,
+        SUM(eb_c1) as eb_c1,
+        SUM(eb_c2) as eb_c2,
+        SUM(eb_c4) as eb_c4,
+        SUM(eb_c5) as eb_c5
     FROM (
         SELECT 
             mw.windmill_number, 
@@ -32,7 +36,11 @@ BEGIN
             0.0 as pp_c1,
             0.0 as pp_c2,
             0.0 as pp_c4,
-            0.0 as pp_c5
+            0.0 as pp_c5,
+            0.0 as eb_c1,
+            0.0 as eb_c2,
+            0.0 as eb_c4,
+            0.0 as eb_c5
         FROM actual_allotment aa
         JOIN masters.master_windmill mw ON aa.windmill_id = mw.id
         WHERE ((aa.year = p_year AND aa.month >= 4) OR (aa.year = p_year + 1 AND aa.month <= 3))
@@ -65,7 +73,11 @@ BEGIN
             COALESCE(CASE WHEN d.slots = 1 THEN d.net_unit END, 0.0) as pp_c1,
             COALESCE(CASE WHEN d.slots = 2 THEN d.net_unit END, 0.0) as pp_c2,
             COALESCE(CASE WHEN d.slots = 4 THEN d.net_unit END, 0.0) as pp_c4,
-            COALESCE(CASE WHEN d.slots = 5 THEN d.net_unit END, 0.0) as pp_c5
+            COALESCE(CASE WHEN d.slots = 5 THEN d.net_unit END, 0.0) as pp_c5,
+            COALESCE(CASE WHEN d.slots = 1 THEN d.banking_units END, 0.0) as eb_c1,
+            COALESCE(CASE WHEN d.slots = 2 THEN d.banking_units END, 0.0) as eb_c2,
+            COALESCE(CASE WHEN d.slots = 4 THEN d.banking_units END, 0.0) as eb_c4,
+            COALESCE(CASE WHEN d.slots = 5 THEN d.banking_units END, 0.0) as eb_c5
         FROM eb_statements es
         JOIN masters.master_windmill mw ON es.windmill_id = mw.id
         JOIN eb_statements_details d ON es.id = d.eb_header_id

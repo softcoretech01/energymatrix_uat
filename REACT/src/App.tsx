@@ -91,6 +91,8 @@ import ErrorLogsPage from "./pages/admin/ErrorLogsPage";
 
 import Layout from "./components/Layout";
 
+import { NumberFormatProvider } from "./contexts/NumberFormatContext";
+
 const queryClient = new QueryClient();
 
 const RequireAuth = ({ children }: { children: JSX.Element }) => {
@@ -118,13 +120,14 @@ const RootRedirect = () => {
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
-      <Toaster />
-      <Sonner />
       <BrowserRouter
         basename="/energymatrix/uat"
         future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
       >
-        <SessionManager>
+        <NumberFormatProvider>
+          <Toaster />
+          <Sonner />
+          <SessionManager>
           <Routes>
             {/* Root path always goes to login first */}
             <Route path="/" element={<RootRedirect />} />
@@ -223,6 +226,7 @@ const App = () => (
             <Route path="*" element={<NotFound />} />
           </Routes>
         </SessionManager>
+        </NumberFormatProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

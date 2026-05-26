@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ArrowLeft, FileText, Info, Briefcase, Zap, Calculator, Loader2, Hash, Calendar } from "lucide-react";
+import { stripSeparators } from "@/lib/utils";
 
 type SolarSlots = {
     C1?: string;
@@ -108,7 +109,7 @@ export default function EBStatementSolarPdf() {
 
     const parseNumber = (value?: string | number): number => {
         if (typeof value === "number") return value;
-        const normalized = String(value || "0").replace(/,/g, "");
+        const normalized = stripSeparators(value || "0");
         const parsed = parseFloat(normalized);
         return Number.isFinite(parsed) ? parsed : 0;
     };
@@ -235,7 +236,7 @@ export default function EBStatementSolarPdf() {
             <div className="mx-auto max-w-5xl space-y-6">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-4">
-                        <Button variant="ghost" onClick={() => navigate("/eb-statement-solar") }>
+                        <Button variant="ghost" onClick={() => navigate("/eb-statement-solar")}>
                             <ArrowLeft className="mr-2 h-4 w-4" /> Back
                         </Button>
                         <h1 className="text-2xl font-bold text-slate-900">EB Statement - Solar</h1>
@@ -246,7 +247,7 @@ export default function EBStatementSolarPdf() {
                                 try {
                                     if (!data) return;
                                     setComparing(true);
-                                    
+
                                     // Use eb_header_id to let backend resolve everything
                                     await api.post("/charges-solar/calculate", {
                                         eb_header_id: Number(solarHeaderId)

@@ -15,6 +15,57 @@ router = APIRouter(
 )
 
 # =====================================================
+# GET ALL NUMBER FORMATS
+# =====================================================
+
+@router.get("/formats")
+async def get_number_formats(user: dict = Depends(get_current_user)):
+    conn = get_connection()
+    cursor = conn.cursor(pymysql.cursors.DictCursor)
+    try:
+        cursor.execute("CALL sp_get_number_formats()")
+        rows = cursor.fetchall()
+        return rows
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cursor.close()
+        conn.close()
+
+# =====================================================
+# UPDATE JUST NUMBER FORMAT ID
+# =====================================================
+
+@router.put("/update-format/{format_id}", response_model=TotalSharesMessage)
+async def update_number_format(format_id: int, user: dict = Depends(get_current_user)):
+    conn = get_connection()
+    cursor = conn.cursor(pymysql.cursors.DictCursor)
+    try:
+        # Check if configuration exists using stored procedure
+        cursor.execute("CALL sp_get_total_shares_by_id(%s)", (1,))
+        existing = cursor.fetchone()
+        if not existing:
+            # Upsert using stored procedure
+            cursor.callproc(
+                "sp_upsert_total_shares",
+                (0, 0, 0, 0, user["id"], format_id)
+            )
+        else:
+            cursor.execute("CALL sp_update_number_format_id(%s, %s)", (1, format_id))
+        conn.commit()
+        return {
+            "message": "Number format updated successfully",
+            "id": 1,
+            "customer_shares": 0
+        }
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cursor.close()
+        conn.close()
+
+# =====================================================
 # CREATE TOTAL SHARES
 # =====================================================
 
@@ -37,15 +88,23 @@ async def create_total(data: TotalSharesCreate, user: dict = Depends(get_current
     existing = cursor.fetchone()
 
     if existing:
+        # Fetch current format from existing using stored procedure
+        number_format_id = data.number_format_id
+        if number_format_id is None:
+            cursor.execute("CALL sp_get_total_shares_by_id(%s)", (1,))
+            row = cursor.fetchone()
+            number_format_id = row["number_format_id"] if row else 4
+
         cursor.execute(
-            "CALL sp_update_total_share(%s,%s,%s,%s,%s,%s)",
+            "CALL sp_update_total_share(%s,%s,%s,%s,%s,%s,%s)",
             (
                 1,
                 total_company,
                 investor,
                 customer_shares,
                 data.is_submitted,
-                user["id"]
+                user["id"],
+                number_format_id
             )
         )
         conn.commit()
@@ -57,7 +116,8 @@ async def create_total(data: TotalSharesCreate, user: dict = Depends(get_current
             "customer_shares": customer_shares
         }
 
-    # Upsert using stored procedure; see sp_upsert_total_shares.
+    # Upsert using stored procedure
+    number_format_id = data.number_format_id if data.number_format_id is not None else 4
     cursor.callproc(
         "sp_upsert_total_shares",
         (
@@ -65,7 +125,8 @@ async def create_total(data: TotalSharesCreate, user: dict = Depends(get_current
             investor,
             customer_shares,
             data.is_submitted,
-            user["id"]
+            user["id"],
+            number_format_id
         )
     )
 
@@ -111,8 +172,6 @@ async def get_total_shares_by_id(id: int):
     return row
 
 
-
-
 @router.put("/{id}", response_model=TotalSharesMessage)
 async def update_total(id: int, data: TotalSharesUpdate, user: dict = Depends(get_current_user)):
     # enforce id=1 for all updates to avoid any other record being modified
@@ -127,15 +186,23 @@ async def update_total(id: int, data: TotalSharesUpdate, user: dict = Depends(ge
     customer_shares = total_company - investor
 
     conn = get_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(pymysql.cursors.DictCursor)
 
-    cursor.execute("CALL sp_update_total_share(%s,%s,%s,%s,%s,%s)", (
+    # Fetch current format from existing using stored procedure
+    number_format_id = data.number_format_id
+    if number_format_id is None:
+        cursor.execute("CALL sp_get_total_shares_by_id(%s)", (id,))
+        row = cursor.fetchone()
+        number_format_id = row["number_format_id"] if row else 4
+
+    cursor.execute("CALL sp_update_total_share(%s,%s,%s,%s,%s,%s,%s)", (
         id,
         total_company,
         investor,
         customer_shares,
         data.is_submitted,
-        user["id"]
+        user["id"],
+        number_format_id
     ))
 
     conn.commit()
@@ -146,4 +213,3 @@ async def update_total(id: int, data: TotalSharesUpdate, user: dict = Depends(ge
         "message": "Total shares updated",
         "customer_shares": customer_shares
     }
-

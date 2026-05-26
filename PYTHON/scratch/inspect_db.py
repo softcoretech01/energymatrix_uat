@@ -28,6 +28,15 @@ def test():
     except Exception as e:
         print("Error describing configuration:", e)
 
+    # Inspect number_format table
+    try:
+        cursor.execute("DESCRIBE number_format")
+        print("\n--- NUMBER_FORMAT COLUMNS ---")
+        for r in cursor.fetchall():
+            print(r)
+    except Exception as e:
+        print("Error describing number_format:", e)
+
     # Inspect master_windmill table
     try:
         cursor.execute("DESCRIBE master_windmill")
@@ -37,13 +46,23 @@ def test():
     except Exception as e:
         print("Error describing master_windmill:", e)
 
-    # Fetch a row from configuration
+    # Fetch configuration data
     try:
-        cursor.execute("SELECT * FROM configuration LIMIT 1")
+        cursor.execute("SELECT * FROM configuration")
         print("\n--- CONFIGURATION DATA ---")
-        print(cursor.fetchone())
+        for r in cursor.fetchall():
+            print(r)
     except Exception as e:
         print("Error fetching configuration data:", e)
+
+    # Fetch number_format data
+    try:
+        cursor.execute("SELECT * FROM number_format")
+        print("\n--- NUMBER_FORMAT DATA ---")
+        for r in cursor.fetchall():
+            print(r)
+    except Exception as e:
+        print("Error fetching number_format data:", e)
 
     cursor.close()
     conn.close()

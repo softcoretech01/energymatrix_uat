@@ -6,6 +6,8 @@ import api from "@/services/api";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 
+import { stripSeparators } from "@/lib/utils";
+
 export default function ActualsPdf() {
     const navigate = useNavigate();
     const { client_eb_id } = useParams();
@@ -57,7 +59,7 @@ export default function ActualsPdf() {
         // Recalculate totals
         let newUpdatedTotal = 0;
         newData.forEach(item => {
-            newUpdatedTotal += (parseFloat(item.updated_windmill_unit) || 0);
+            newUpdatedTotal += (parseFloat(stripSeparators(item.updated_windmill_unit)) || 0);
         });
         setUpdatedTotal(newUpdatedTotal);
 
@@ -74,7 +76,7 @@ export default function ActualsPdf() {
         try {
             const updates = data.map(item => ({
                 actual_id: item.actual_id,
-                updated_windmill_unit: parseFloat(item.updated_windmill_unit) || 0
+                updated_windmill_unit: parseFloat(stripSeparators(item.updated_windmill_unit)) || 0
             }));
 
             await api.post("/actuals/update-units", { updates });
@@ -169,7 +171,7 @@ export default function ActualsPdf() {
                                             : (item.updated_windmill_unit === "" ? "" : Number(item.updated_windmill_unit).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
                                         }
                                         onChange={(e) => {
-                                            const rawValue = e.target.value.replace(/,/g, '');
+                                            const rawValue = stripSeparators(e.target.value);
                                             if (rawValue === "" || !isNaN(Number(rawValue)) || rawValue === ".") {
                                                 handleUpdateUnit(index, rawValue);
                                             }

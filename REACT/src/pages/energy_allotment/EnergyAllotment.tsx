@@ -25,20 +25,17 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { utils, writeFile } from "xlsx";
 
+import { stripSeparators } from "@/lib/utils";
+import { globalFormatWithActiveSeparators } from "@/contexts/NumberFormatContext";
+
 const allotmentData = [];
 
 const formatWithCommas = (val: string | number) => {
-    if (val === null || val === undefined || val === '') return '';
-    const s = val.toString().replace(/,/g, '');
-    if (isNaN(Number(s))) return s;
-    const parts = s.split('.');
-    const formattedInt = Number(parts[0]).toLocaleString('en-IN');
-    return parts.length > 1 ? `${formattedInt}.${parts[1]}` : formattedInt;
+    return globalFormatWithActiveSeparators(val);
 };
 
 const stripCommas = (val: string | number) => {
-    if (val === null || val === undefined) return '';
-    return val.toString().replace(/,/g, '');
+    return stripSeparators(val);
 };
 
 
@@ -453,7 +450,7 @@ function EnergyAllotment() {
             order.forEach((r, idx) => {
                 const item = itemMap.get(`${r.customer}-${r.seNumber}`);
                 ['c1', 'c2', 'c4', 'c5'].forEach(slot => {
-                    const val = Number(String(item?.[slot] || '0').replace(/,/g, '')) || 0;
+                    const val = Number(stripSeparators(item?.[slot] || '0')) || 0;
                     cumulativeMap[wm][slot][idx + 1] = cumulativeMap[wm][slot][idx] + val;
                 });
             });
@@ -780,11 +777,11 @@ function EnergyAllotment() {
 
     // Calculate Totals
     const totals = allotmentData.reduce((acc, row) => ({
-        c1: acc.c1 + Number(row.c1.replace(/,/g, '')),
-        c2: acc.c2 + Number(row.c2.replace(/,/g, '')),
-        c4: acc.c4 + Number(row.c4.replace(/,/g, '')),
-        c5: acc.c5 + Number(row.c5.replace(/,/g, '')),
-        consumption: acc.consumption + Number(row.consumption.replace(/,/g, '')),
+        c1: acc.c1 + Number(stripSeparators(row.c1)),
+        c2: acc.c2 + Number(stripSeparators(row.c2)),
+        c4: acc.c4 + Number(stripSeparators(row.c4)),
+        c5: acc.c5 + Number(stripSeparators(row.c5)),
+        consumption: acc.consumption + Number(stripSeparators(row.consumption)),
     }), { c1: 0, c2: 0, c4: 0, c5: 0, consumption: 0 });
 
     const handleEditClick = () => {

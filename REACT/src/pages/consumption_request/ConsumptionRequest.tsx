@@ -20,7 +20,7 @@ import {
     TableRow,
     TableFooter,
 } from "@/components/ui/table";
-import { cn } from "@/lib/utils";
+import { cn, stripSeparators } from "@/lib/utils";
 
 const requestData: any[] = [];
 
@@ -104,14 +104,14 @@ export default function ConsumptionRequest() {
         // Strip commas for editing
         setData(prevData => prevData.map(row =>
             Number(row.service_id) === idNum
-                ? { ...row, [field]: String(row[field] || "").replace(/,/g, '') }
+                ? { ...row, [field]: stripSeparators(row[field] || "") }
                 : row
         ));
     };
 
     const handleValueChange = (serviceId: any, field: string, value: string) => {
         // Strip commas before validation
-        const cleanValue = value.replace(/,/g, '');
+        const cleanValue = stripSeparators(value);
 
         if (cleanValue === '') {
             const idNum = Number(serviceId);
@@ -155,11 +155,11 @@ export default function ConsumptionRequest() {
             return;
         }
 
-        const numValue = parseFloat(value.replace(/,/g, ''));
-        const formattedValue = numValue.toLocaleString("en-IN", {
+        const numValue = parseFloat(stripSeparators(value));
+        const formattedValue = numValue.toLocaleString(undefined, {
             maximumFractionDigits: 2,
             minimumFractionDigits: 0
-        }).replace(/\.00$/, '');
+        });
 
         setData(prevData => prevData.map(row =>
             Number(row.service_id) === idNum ? { ...row, [field]: formattedValue } : row
@@ -198,7 +198,7 @@ export default function ConsumptionRequest() {
 
     const totals = filteredData.reduce((acc, row) => {
         const parseVal = (val: any) => {
-            if (typeof val === 'string') return Number(val.replace(/,/g, '')) || 0;
+            if (typeof val === 'string') return Number(stripSeparators(val)) || 0;
             return Number(val) || 0;
         };
         const c1 = parseVal(row.c1);
@@ -251,7 +251,7 @@ export default function ConsumptionRequest() {
                 month: parseInt(selectedMonth),
                 day: new Date().getDate(),
                 requests: modifiedRows.map(row => {
-                    const p = (v: any) => Number(String(v || "0").replace(/,/g, '')) || 0;
+                    const p = (v: any) => Number(stripSeparators(v || "0")) || 0;
                     const c1 = p(row.c1);
                     const c2 = p(row.c2);
                     const c4 = p(row.c4);
@@ -453,13 +453,13 @@ export default function ConsumptionRequest() {
                                             </TableCell>
                                             <TableCell className="py-2 p-1">
                                                 {(() => {
-                                                    const p = (v: any) => Number(String(v || "0").replace(/,/g, '')) || 0;
+                                                    const p = (v: any) => Number(stripSeparators(v || "0")) || 0;
                                                     const total = p(row.c1) + p(row.c2) + p(row.c4) + p(row.c5);
                                                     return (
                                                         <Input
                                                             readOnly
                                                             className="h-8 text-right text-sm border-slate-200 shadow-none focus-visible:ring-1 bg-slate-50 text-slate-700 font-semibold"
-                                                            value={total.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                                                            value={total.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                                                         />
                                                     );
                                                 })()}

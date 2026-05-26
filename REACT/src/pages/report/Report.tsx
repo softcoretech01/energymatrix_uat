@@ -31,6 +31,7 @@ interface WindmillRecord {
     balance: number;
     transmissionLoss: number;
     bankingLoss: number;
+    ebBanking: number;
 }
 
 interface MonthlyData {
@@ -61,6 +62,10 @@ export default function BankReport() {
         pp_c2: number;
         pp_c4: number;
         pp_c5: number;
+        eb_c1: number;
+        eb_c2: number;
+        eb_c4: number;
+        eb_c5: number;
     }>>({});
 
     useEffect(() => {
@@ -120,6 +125,10 @@ export default function BankReport() {
                         pp_c2: number;
                         pp_c4: number;
                         pp_c5: number;
+                        eb_c1: number;
+                        eb_c2: number;
+                        eb_c4: number;
+                        eb_c5: number;
                     }> = {};
                     response.data.forEach((item: any) => {
                         const key = `${item.year}-${item.month}-${String(item.windmill_number || "").trim()}`;
@@ -133,6 +142,10 @@ export default function BankReport() {
                             pp_c2: Number(item.pp_c2 || 0),
                             pp_c4: Number(item.pp_c4 || 0),
                             pp_c5: Number(item.pp_c5 || 0),
+                            eb_c1: Number(item.eb_c1 || 0),
+                            eb_c2: Number(item.eb_c2 || 0),
+                            eb_c4: Number(item.eb_c4 || 0),
+                            eb_c5: Number(item.eb_c5 || 0),
                         };
                     });
                     setUtilizedData(dataMap);
@@ -203,7 +216,11 @@ export default function BankReport() {
                 pp_c1: 0,
                 pp_c2: 0,
                 pp_c4: 0,
-                pp_c5: 0
+                pp_c5: 0,
+                eb_c1: 0,
+                eb_c2: 0,
+                eb_c4: 0,
+                eb_c5: 0
             };
 
             const slots = ["C1", "C2", "C4", "C5"];
@@ -219,19 +236,24 @@ export default function BankReport() {
 
                 let slotPowerplant = 0;
                 let slotUtilized = 0;
+                let slotEbBanking = 0;
 
                 if (slot === "C1") {
                     slotPowerplant = dbUtilized.pp_c1;
                     slotUtilized = dbUtilized.c1;
+                    slotEbBanking = dbUtilized.eb_c1;
                 } else if (slot === "C2") {
                     slotPowerplant = dbUtilized.pp_c2;
                     slotUtilized = dbUtilized.c2;
+                    slotEbBanking = dbUtilized.eb_c2;
                 } else if (slot === "C4") {
                     slotPowerplant = dbUtilized.pp_c4;
                     slotUtilized = dbUtilized.c4;
+                    slotEbBanking = dbUtilized.eb_c4;
                 } else if (slot === "C5") {
                     slotPowerplant = dbUtilized.pp_c5;
                     slotUtilized = dbUtilized.c5;
+                    slotEbBanking = dbUtilized.eb_c5;
                 }
 
                 // Rule 2, 3 & 4:
@@ -255,8 +277,8 @@ export default function BankReport() {
                 
                 const slotBalance = parseFloat((slotBanking - slotUtilizedBanking + slotAddedBanking).toFixed(2));
 
-                // Update running balance for next month's banking
-                runningBalances[balanceKey] = slotBalance;
+                // Update running balance for next month's banking (using EB Banking units)
+                runningBalances[balanceKey] = slotEbBanking;
 
                 return {
                     windmillNumber: wmNumber,
@@ -269,6 +291,7 @@ export default function BankReport() {
                     balance: slotBalance,
                     transmissionLoss,
                     bankingLoss,
+                    ebBanking: slotEbBanking,
                 };
             });
         });
@@ -320,7 +343,8 @@ export default function BankReport() {
                     "Total Utilized": row.utilized,
                     "Utilized Banking": row.utilizedBanking,
                     "Added Banking": row.addedBanking,
-                    "Closing Banking": row.balance
+                    "Closing Banking": row.balance,
+                    "EB Banking": row.ebBanking
                 });
             });
         });
@@ -543,15 +567,18 @@ export default function BankReport() {
                                     <TableHead className="font-semibold text-xs tracking-wider uppercase text-slate-200 bg-sidebar text-right sticky top-0 z-20 border-r border-white/10">
                                         Added Banking
                                     </TableHead>
-                                    <TableHead className="font-semibold text-xs tracking-wider uppercase text-slate-200 bg-sidebar text-right sticky top-0 z-20">
+                                    <TableHead className="font-semibold text-xs tracking-wider uppercase text-slate-200 bg-sidebar text-right sticky top-0 z-20 border-r border-white/10">
                                         Closing Banking
+                                    </TableHead>
+                                    <TableHead className="font-semibold text-xs tracking-wider uppercase text-slate-200 bg-sidebar text-right sticky top-0 z-20">
+                                        EB Banking
                                     </TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {filteredDataList.map((group) => {
                                     const isExpanded = expandedMonths[group.monthName];
-
+ 
                                     // Calculate totals for the group row
                                     const totalBanking = group.records.reduce((sum, r) => sum + r.banking, 0);
                                     const totalPowerplant = group.records.reduce((sum, r) => sum + r.powerplant, 0);
@@ -559,8 +586,9 @@ export default function BankReport() {
                                     const totalUtilizedBanking = group.records.reduce((sum, r) => sum + r.utilizedBanking, 0);
                                     const totalAddedBanking = group.records.reduce((sum, r) => sum + r.addedBanking, 0);
                                     const totalBalance = group.records.reduce((sum, r) => sum + r.balance, 0);
+                                    const totalEbBanking = group.records.reduce((sum, r) => sum + r.ebBanking, 0);
                                     const uniqueWindmillsCount = new Set(group.records.map(r => r.windmillNumber)).size;
-
+ 
                                     return (
                                         <React.Fragment key={group.monthName}>
                                             {/* Month Summary Header Row (Collapsible Toggle) */}
@@ -592,11 +620,14 @@ export default function BankReport() {
                                                 <TableCell className={`py-3 px-4 text-right font-bold border-b border-slate-200 border-r border-slate-200 ${totalAddedBanking < 0 ? "text-red-600" : "text-black"}`}>
                                                     {totalAddedBanking.toLocaleString()}
                                                 </TableCell>
-                                                <TableCell className={`py-3 px-4 text-right font-bold border-b border-slate-200 ${totalBalance < 0 ? "text-red-600" : "text-black"}`}>
+                                                <TableCell className={`py-3 px-4 text-right font-bold border-b border-slate-200 border-r border-slate-200 ${totalBalance < 0 ? "text-red-600" : "text-black"}`}>
                                                     {totalBalance.toLocaleString()}
                                                 </TableCell>
+                                                <TableCell className={`py-3 px-4 text-right font-bold border-b border-slate-200 ${totalEbBanking < 0 ? "text-red-600" : "text-black"}`}>
+                                                    {totalEbBanking.toLocaleString()}
+                                                </TableCell>
                                             </TableRow>
-
+ 
                                             {/* Windmill Detail Rows (Visible only when expanded) */}
                                             {isExpanded && (
                                                 <>
@@ -604,11 +635,11 @@ export default function BankReport() {
                                                         const firstIdx = group.records.findIndex(r => r.windmillNumber === row.windmillNumber);
                                                         const count = group.records.filter(r => r.windmillNumber === row.windmillNumber).length;
                                                         const isFirst = index === firstIdx;
-
+ 
                                                         const baseSurplus = row.powerplant > row.utilized ? row.powerplant - row.utilized : 0;
                                                         const transLossUnits = parseFloat(((baseSurplus * row.transmissionLoss) / 100).toFixed(2));
                                                         const bankLossUnits = parseFloat(((baseSurplus * row.bankingLoss) / 100).toFixed(2));
-
+ 
                                                         return (
                                                             <TableRow
                                                                 key={index}
@@ -658,10 +689,13 @@ export default function BankReport() {
                                                                     {row.addedBanking.toLocaleString()}
                                                                 </TableCell>
                                                                 <TableCell
-                                                                    className={`py-2.5 px-4 text-right border-b border-slate-200 ${row.balance < 0 ? "text-red-600" : "text-black"}`}
+                                                                    className={`py-2.5 px-4 text-right border-b border-slate-200 border-r border-slate-200 ${row.balance < 0 ? "text-red-600" : "text-black"}`}
                                                                     title={`Opening Banking (${row.banking.toLocaleString()}) - Utilized Banking (${row.utilizedBanking.toLocaleString()}) + Added Banking (${row.addedBanking.toLocaleString()}) = ${row.balance.toLocaleString()}`}
                                                                 >
                                                                     {row.balance.toLocaleString()}
+                                                                </TableCell>
+                                                                <TableCell className={`py-2.5 px-4 text-right border-b border-slate-200 ${row.ebBanking < 0 ? "text-red-600" : "text-black"}`}>
+                                                                    {row.ebBanking.toLocaleString()}
                                                                 </TableCell>
                                                             </TableRow>
                                                         );
@@ -673,7 +707,7 @@ export default function BankReport() {
                                 })}
                                 {filteredDataList.every(g => g.records.length === 0) && (
                                     <TableRow>
-                                        <TableCell colSpan={9} className="text-center py-12 text-slate-400 bg-slate-50">
+                                        <TableCell colSpan={10} className="text-center py-12 text-slate-400 bg-slate-50">
                                             <div className="flex flex-col items-center justify-center gap-3">
                                                 <Search className="h-8 w-8 text-slate-300 stroke-[1.5]" />
                                                 <div>
