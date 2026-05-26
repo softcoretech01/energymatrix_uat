@@ -7,17 +7,17 @@ import pymysql
 router = APIRouter()
 
 @router.get("/banking/utilized")
-async def get_banking_utilized(year: int, current_user: dict = Depends(get_current_user)):
+async def get_banking_utilized(year: int, mode: str = "financial", current_user: dict = Depends(get_current_user)):
     """
     Fetches the total actual allotments (utilized units) and slot-wise units (c1, c2, c4, c5)
     from actual_allotment, alongside powerplant slot-wise net units (pp_c1, pp_c2, pp_c4, pp_c5)
-    from eb_statements and eb_statements_details, for the specified financial year.
+    from eb_statements and eb_statements_details, for the specified calendar/financial year.
     """
     conn = get_connection(db_name="windmill")
     cursor = conn.cursor(pymysql.cursors.DictCursor)
     try:
         # 1. Fetch main banking utilized records via stored procedure
-        cursor.callproc("sp_get_banking_utilized", (year,))
+        cursor.callproc("sp_get_banking_utilized", (year, mode))
         rows = cursor.fetchall()
         
         # 2. Fetch transmission loss for each windmill

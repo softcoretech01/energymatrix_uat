@@ -3,7 +3,8 @@ DROP PROCEDURE IF EXISTS windmill.sp_get_banking_utilized;
 DELIMITER //
 
 CREATE PROCEDURE windmill.sp_get_banking_utilized(
-    IN p_year INT
+    IN p_year INT,
+    IN p_mode VARCHAR(20)
 )
 BEGIN
     SELECT 
@@ -43,7 +44,11 @@ BEGIN
             0.0 as eb_c5
         FROM actual_allotment aa
         JOIN masters.master_windmill mw ON aa.windmill_id = mw.id
-        WHERE ((aa.year = p_year AND aa.month >= 4) OR (aa.year = p_year + 1 AND aa.month <= 3))
+        WHERE (
+            (p_mode = 'financial' AND ((aa.year = p_year AND aa.month >= 4) OR (aa.year = p_year + 1 AND aa.month <= 3)))
+            OR
+            (p_mode = 'calendar' AND (aa.year = p_year))
+        )
           AND LOWER(mw.type) = 'windmill'
           
         UNION ALL
@@ -81,34 +86,40 @@ BEGIN
         FROM eb_statements es
         JOIN masters.master_windmill mw ON es.windmill_id = mw.id
         JOIN eb_statements_details d ON es.id = d.eb_header_id
-        WHERE ((es.year = p_year AND CASE TRIM(es.month)
-                                    WHEN 'January' THEN 1
-                                    WHEN 'February' THEN 2
-                                    WHEN 'March' THEN 3
-                                    WHEN 'April' THEN 4
-                                    WHEN 'May' THEN 5
-                                    WHEN 'June' THEN 6
-                                    WHEN 'July' THEN 7
-                                    WHEN 'August' THEN 8
-                                    WHEN 'September' THEN 9
-                                    WHEN 'October' THEN 10
-                                    WHEN 'November' THEN 11
-                                    WHEN 'December' THEN 12
-                                END >= 4) 
-            OR (es.year = p_year + 1 AND CASE TRIM(es.month)
-                                        WHEN 'January' THEN 1
-                                        WHEN 'February' THEN 2
-                                        WHEN 'March' THEN 3
-                                        WHEN 'April' THEN 4
-                                        WHEN 'May' THEN 5
-                                        WHEN 'June' THEN 6
-                                        WHEN 'July' THEN 7
-                                        WHEN 'August' THEN 8
-                                        WHEN 'September' THEN 9
-                                        WHEN 'October' THEN 10
-                                        WHEN 'November' THEN 11
-                                        WHEN 'December' THEN 12
-                                     END <= 3))
+        WHERE (
+            (p_mode = 'financial' AND (
+                (es.year = p_year AND CASE TRIM(es.month)
+                                            WHEN 'January' THEN 1
+                                            WHEN 'February' THEN 2
+                                            WHEN 'March' THEN 3
+                                            WHEN 'April' THEN 4
+                                            WHEN 'May' THEN 5
+                                            WHEN 'June' THEN 6
+                                            WHEN 'July' THEN 7
+                                            WHEN 'August' THEN 8
+                                            WHEN 'September' THEN 9
+                                            WHEN 'October' THEN 10
+                                            WHEN 'November' THEN 11
+                                            WHEN 'December' THEN 12
+                                        END >= 4) 
+                OR (es.year = p_year + 1 AND CASE TRIM(es.month)
+                                                WHEN 'January' THEN 1
+                                                WHEN 'February' THEN 2
+                                                WHEN 'March' THEN 3
+                                                WHEN 'April' THEN 4
+                                                WHEN 'May' THEN 5
+                                                WHEN 'June' THEN 6
+                                                WHEN 'July' THEN 7
+                                                WHEN 'August' THEN 8
+                                                WHEN 'September' THEN 9
+                                                WHEN 'October' THEN 10
+                                                WHEN 'November' THEN 11
+                                                WHEN 'December' THEN 12
+                                             END <= 3)
+            ))
+            OR
+            (p_mode = 'calendar' AND (es.year = p_year))
+        )
           AND LOWER(mw.type) = 'windmill'
     ) as combined
     GROUP BY windmill_number, year, month;
