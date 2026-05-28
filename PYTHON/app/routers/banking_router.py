@@ -31,7 +31,14 @@ async def get_banking_utilized(year: int, mode: str = "financial", current_user:
         
         # Convert Decimal values to float and attach transmission_loss/banking_loss
         for r in rows:
-            for field in ['total_utilized', 'c1', 'c2', 'c4', 'c5', 'pp_c1', 'pp_c2', 'pp_c4', 'pp_c5', 'eb_c1', 'eb_c2', 'eb_c4', 'eb_c5']:
+            for field in [
+                'total_utilized', 'c1', 'c2', 'c4', 'c5', 
+                'pp_c1', 'pp_c2', 'pp_c4', 'pp_c5', 
+                'eb_c1', 'eb_c2', 'eb_c4', 'eb_c5',
+                'ao_pp_c1', 'ao_pp_c2', 'ao_pp_c4', 'ao_pp_c5',
+                'ao_bank_c1', 'ao_bank_c2', 'ao_bank_c4', 'ao_bank_c5',
+                'ao_bal_c1', 'ao_bal_c2', 'ao_bal_c4', 'ao_bal_c5'
+            ]:
                 if field in r and r[field] is not None:
                     r[field] = float(r[field])
                 else:

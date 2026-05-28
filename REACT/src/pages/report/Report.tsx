@@ -26,22 +26,12 @@ interface WindmillRecord {
     slot: string;
     banking: number;
     powerplant: number;
-    utilized: number;
-    utilizedBanking: number;
-    addedBanking: number;
-    balance: number;
+    aoPowerplantUtilized: number;
+    aoBankingUtilized: number;
+    aoBalanceBanking: number;
     transmissionLoss: number;
     bankingLoss: number;
     ebBanking: number;
-    initDiff?: number;
-    ppBorrowedFrom?: string;
-    ppBorrowedAmount?: number;
-    ppSharedTo?: string;
-    ppSharedAmount?: number;
-    bankBorrowedFrom?: string;
-    bankBorrowedAmount?: number;
-    bankSharedTo?: string;
-    bankSharedAmount?: number;
 }
 
 interface MonthlyData {
@@ -57,7 +47,6 @@ export default function BankReport() {
 
     const [selectedYear, setSelectedYear] = useState<string>((new Date().getFullYear() - 1).toString());
     const [reportType, setReportType] = useState<"current" | "financial">("financial");
-    const [showAlternativeGrid, setShowAlternativeGrid] = useState<boolean>(true);
     const [windmills, setWindmills] = useState<string[]>([]);
     const [windmillLossesMap, setWindmillLossesMap] = useState<Record<string, number>>({});
     const [globalBankingLoss, setGlobalBankingLoss] = useState<number>(0);
@@ -78,6 +67,18 @@ export default function BankReport() {
         eb_c2: number;
         eb_c4: number;
         eb_c5: number;
+        ao_pp_c1: number;
+        ao_pp_c2: number;
+        ao_pp_c4: number;
+        ao_pp_c5: number;
+        ao_bank_c1: number;
+        ao_bank_c2: number;
+        ao_bank_c4: number;
+        ao_bank_c5: number;
+        ao_bal_c1: number;
+        ao_bal_c2: number;
+        ao_bal_c4: number;
+        ao_bal_c5: number;
     }>>({});
 
     useEffect(() => {
@@ -143,6 +144,18 @@ export default function BankReport() {
                         eb_c2: number;
                         eb_c4: number;
                         eb_c5: number;
+                        ao_pp_c1: number;
+                        ao_pp_c2: number;
+                        ao_pp_c4: number;
+                        ao_pp_c5: number;
+                        ao_bank_c1: number;
+                        ao_bank_c2: number;
+                        ao_bank_c4: number;
+                        ao_bank_c5: number;
+                        ao_bal_c1: number;
+                        ao_bal_c2: number;
+                        ao_bal_c4: number;
+                        ao_bal_c5: number;
                     }> = {};
                     response.data.forEach((item: any) => {
                         const key = `${item.year}-${item.month}-${String(item.windmill_number || "").trim()}`;
@@ -160,6 +173,18 @@ export default function BankReport() {
                             eb_c2: Number(item.eb_c2 || 0),
                             eb_c4: Number(item.eb_c4 || 0),
                             eb_c5: Number(item.eb_c5 || 0),
+                            ao_pp_c1: Number(item.ao_pp_c1 || 0),
+                            ao_pp_c2: Number(item.ao_pp_c2 || 0),
+                            ao_pp_c4: Number(item.ao_pp_c4 || 0),
+                            ao_pp_c5: Number(item.ao_pp_c5 || 0),
+                            ao_bank_c1: Number(item.ao_bank_c1 || 0),
+                            ao_bank_c2: Number(item.ao_bank_c2 || 0),
+                            ao_bank_c4: Number(item.ao_bank_c4 || 0),
+                            ao_bank_c5: Number(item.ao_bank_c5 || 0),
+                            ao_bal_c1: Number(item.ao_bal_c1 || 0),
+                            ao_bal_c2: Number(item.ao_bal_c2 || 0),
+                            ao_bal_c4: Number(item.ao_bal_c4 || 0),
+                            ao_bal_c5: Number(item.ao_bal_c5 || 0),
                         };
                     });
                     setUtilizedData(dataMap);
@@ -257,7 +282,19 @@ export default function BankReport() {
                 eb_c1: 0,
                 eb_c2: 0,
                 eb_c4: 0,
-                eb_c5: 0
+                eb_c5: 0,
+                ao_pp_c1: 0,
+                ao_pp_c2: 0,
+                ao_pp_c4: 0,
+                ao_pp_c5: 0,
+                ao_bank_c1: 0,
+                ao_bank_c2: 0,
+                ao_bank_c4: 0,
+                ao_bank_c5: 0,
+                ao_bal_c1: 0,
+                ao_bal_c2: 0,
+                ao_bal_c4: 0,
+                ao_bal_c5: 0,
             };
 
             // Fetch dynamic values for NEXT month to get its banking_units as current month's EB Banking
@@ -277,54 +314,13 @@ export default function BankReport() {
 
             // Define slot values for calculations
             const slotValues = {
-                C1: { pp: dbUtilized.pp_c1, ut: dbUtilized.c1, eb: dbUtilizedNext.eb_c1 },
-                C2: { pp: dbUtilized.pp_c2, ut: dbUtilized.c2, eb: dbUtilizedNext.eb_c2 },
-                C4: { pp: dbUtilized.pp_c4, ut: dbUtilized.c4, eb: dbUtilizedNext.eb_c4 },
-                C5: { pp: dbUtilized.pp_c5, ut: dbUtilized.c5, eb: dbUtilizedNext.eb_c5 }
+                C1: { pp: dbUtilized.pp_c1, ut: dbUtilized.c1, eb: dbUtilizedNext.eb_c1, aoPP: dbUtilized.ao_pp_c1, aoBank: dbUtilized.ao_bank_c1, aoBal: dbUtilized.ao_bal_c1 },
+                C2: { pp: dbUtilized.pp_c2, ut: dbUtilized.c2, eb: dbUtilizedNext.eb_c2, aoPP: dbUtilized.ao_pp_c2, aoBank: dbUtilized.ao_bank_c2, aoBal: dbUtilized.ao_bal_c2 },
+                C4: { pp: dbUtilized.pp_c4, ut: dbUtilized.c4, eb: dbUtilizedNext.eb_c4, aoPP: dbUtilized.ao_pp_c4, aoBank: dbUtilized.ao_bank_c4, aoBal: dbUtilized.ao_bal_c4 },
+                C5: { pp: dbUtilized.pp_c5, ut: dbUtilized.c5, eb: dbUtilizedNext.eb_c5, aoPP: dbUtilized.ao_pp_c5, aoBank: dbUtilized.ao_bank_c5, aoBal: dbUtilized.ao_bal_c5 }
             };
 
-            // Calculate initial diffs (surplus if positive, deficit if negative)
-            const diffs = {
-                C1: slotValues.C1.pp - slotValues.C1.ut,
-                C2: slotValues.C2.pp - slotValues.C2.ut,
-                C4: slotValues.C4.pp - slotValues.C4.ut,
-                C5: slotValues.C5.pp - slotValues.C5.ut
-            };
-
-            // 1. Powerplant sharing variables
-            let pp_c1_borrowed_from_c2 = 0;
-            let pp_c2_borrowed_from_c1 = 0;
-            let pp_c5_borrowed_from_c4 = 0;
-
-            // Group A (C1 <----> C2 two-way powerplant sharing)
-            if (diffs.C1 < 0 && diffs.C2 > 0) {
-                pp_c1_borrowed_from_c2 = Math.min(-diffs.C1, diffs.C2);
-            } else if (diffs.C2 < 0 && diffs.C1 > 0) {
-                pp_c2_borrowed_from_c1 = Math.min(-diffs.C2, diffs.C1);
-            }
-
-            // Group B (C4 ----> C5 one-way powerplant sharing)
-            if (diffs.C5 < 0 && diffs.C4 > 0) {
-                pp_c5_borrowed_from_c4 = Math.min(-diffs.C5, diffs.C4);
-            }
-
-            // Adjusted powerplant deficits
-            const adjustedDeficits = {
-                C1: diffs.C1 < 0 ? -diffs.C1 - pp_c1_borrowed_from_c2 : 0,
-                C2: diffs.C2 < 0 ? -diffs.C2 - pp_c2_borrowed_from_c1 : 0,
-                C4: diffs.C4 < 0 ? -diffs.C4 : 0,
-                C5: diffs.C5 < 0 ? -diffs.C5 - pp_c5_borrowed_from_c4 : 0
-            };
-
-            // Adjusted powerplant surpluses
-            const adjustedSurpluses = {
-                C1: diffs.C1 > 0 ? diffs.C1 - pp_c2_borrowed_from_c1 : 0,
-                C2: diffs.C2 > 0 ? diffs.C2 - pp_c1_borrowed_from_c2 : 0,
-                C4: diffs.C4 > 0 ? diffs.C4 - pp_c5_borrowed_from_c4 : 0,
-                C5: diffs.C5 > 0 ? diffs.C5 : 0
-            };
-
-            // 2. Fetch opening banking values
+            // Fetch opening banking values
             const openingBanking = {
                 C1: monthName === "April" ? 0 : (runningBalances[`${wmNumber}-C1`] || 0),
                 C2: monthName === "April" ? 0 : (runningBalances[`${wmNumber}-C2`] || 0),
@@ -332,167 +328,12 @@ export default function BankReport() {
                 C5: monthName === "April" ? 0 : (runningBalances[`${wmNumber}-C5`] || 0)
             };
 
-            // 3. Own banking utilization and remaining calculations
-            const ownUtilization = {
-                C1: Math.min(adjustedDeficits.C1, openingBanking.C1),
-                C2: Math.min(adjustedDeficits.C2, openingBanking.C2),
-                C4: Math.min(adjustedDeficits.C4, openingBanking.C4),
-                C5: Math.min(adjustedDeficits.C5, openingBanking.C5)
-            };
-
-            const remDeficits = {
-                C1: adjustedDeficits.C1 - ownUtilization.C1,
-                C2: adjustedDeficits.C2 - ownUtilization.C2,
-                C4: adjustedDeficits.C4 - ownUtilization.C4,
-                C5: adjustedDeficits.C5 - ownUtilization.C5
-            };
-
-            const remBanking = {
-                C1: openingBanking.C1 - ownUtilization.C1,
-                C2: openingBanking.C2 - ownUtilization.C2,
-                C4: openingBanking.C4 - ownUtilization.C4,
-                C5: openingBanking.C5 - ownUtilization.C5
-            };
-
-            // 4. Banking sharing variables
-            let bank_c1_borrowed_from_c2 = 0;
-            let bank_c2_borrowed_from_c1 = 0;
-            let bank_c5_borrowed_from_c4 = 0;
-
-            // Group A (C1 <----> C2 two-way banking sharing)
-            if (remDeficits.C1 > 0 && remBanking.C2 > 0) {
-                bank_c1_borrowed_from_c2 = Math.min(remDeficits.C1, remBanking.C2);
-            } else if (remDeficits.C2 > 0 && remBanking.C1 > 0) {
-                bank_c2_borrowed_from_c1 = Math.min(remDeficits.C2, remBanking.C1);
-            }
-
-            // Group B (C4 ----> C5 one-way banking sharing)
-            if (remDeficits.C5 > 0 && remBanking.C4 > 0) {
-                bank_c5_borrowed_from_c4 = Math.min(remDeficits.C5, remBanking.C4);
-            }
-
-            // 5. Final allocations
-            const finalLentToOther = {
-                C1: bank_c2_borrowed_from_c1,
-                C2: bank_c1_borrowed_from_c2,
-                C4: bank_c5_borrowed_from_c4,
-                C5: 0
-            };
-
-            const finalBorrowedFromOther = {
-                C1: bank_c1_borrowed_from_c2,
-                C2: bank_c2_borrowed_from_c1,
-                C4: 0,
-                C5: bank_c5_borrowed_from_c4
-            };
-
-            const unmetDeficits = {
-                C1: remDeficits.C1 - finalBorrowedFromOther.C1,
-                C2: remDeficits.C2 - finalBorrowedFromOther.C2,
-                C4: remDeficits.C4 - finalBorrowedFromOther.C4,
-                C5: remDeficits.C5 - finalBorrowedFromOther.C5
-            };
-
-            // finalUtilizedBanking includes own utilization, lent to other, and unmet deficits
-            const finalUtilizedBanking = {
-                C1: ownUtilization.C1 + finalLentToOther.C1 + unmetDeficits.C1,
-                C2: ownUtilization.C2 + finalLentToOther.C2 + unmetDeficits.C2,
-                C4: ownUtilization.C4 + finalLentToOther.C4 + unmetDeficits.C4,
-                C5: ownUtilization.C5 + finalLentToOther.C5 + unmetDeficits.C5
-            };
-
             const slots = ["C1", "C2", "C4", "C5"] as const;
 
             return slots.map((slot) => {
                 const balanceKey = `${wmNumber}-${slot}`;
                 const val = slotValues[slot];
-                const initDiff = diffs[slot];
-
                 const slotBanking = openingBanking[slot];
-                const slotUtilizedBanking = finalUtilizedBanking[slot];
-
-                // Determine powerplant sharing details
-                let ppBorrowedFrom = "";
-                let ppBorrowedAmount = 0;
-                let ppSharedTo = "";
-                let ppSharedAmount = 0;
-
-                if (slot === "C1") {
-                    if (initDiff < 0) {
-                        ppBorrowedFrom = "C2";
-                        ppBorrowedAmount = pp_c1_borrowed_from_c2;
-                    } else {
-                        ppSharedTo = "C2";
-                        ppSharedAmount = pp_c2_borrowed_from_c1;
-                    }
-                } else if (slot === "C2") {
-                    if (initDiff < 0) {
-                        ppBorrowedFrom = "C1";
-                        ppBorrowedAmount = pp_c2_borrowed_from_c1;
-                    } else {
-                        ppSharedTo = "C1";
-                        ppSharedAmount = pp_c1_borrowed_from_c2;
-                    }
-                } else if (slot === "C4") {
-                    if (initDiff >= 0) {
-                        ppSharedTo = "C5";
-                        ppSharedAmount = pp_c5_borrowed_from_c4;
-                    }
-                } else if (slot === "C5") {
-                    if (initDiff < 0) {
-                        ppBorrowedFrom = "C4";
-                        ppBorrowedAmount = pp_c5_borrowed_from_c4;
-                    }
-                }
-
-                // Determine banking sharing details
-                let bankBorrowedFrom = "";
-                let bankBorrowedAmount = 0;
-                let bankSharedTo = "";
-                let bankSharedAmount = 0;
-
-                if (slot === "C1") {
-                    if (finalBorrowedFromOther.C1 > 0) {
-                        bankBorrowedFrom = "C2";
-                        bankBorrowedAmount = finalBorrowedFromOther.C1;
-                    } else if (finalLentToOther.C1 > 0) {
-                        bankSharedTo = "C2";
-                        bankSharedAmount = finalLentToOther.C1;
-                    }
-                } else if (slot === "C2") {
-                    if (finalBorrowedFromOther.C2 > 0) {
-                        bankBorrowedFrom = "C1";
-                        bankBorrowedAmount = finalBorrowedFromOther.C2;
-                    } else if (finalLentToOther.C2 > 0) {
-                        bankSharedTo = "C1";
-                        bankSharedAmount = finalLentToOther.C2;
-                    }
-                } else if (slot === "C4") {
-                    if (finalLentToOther.C4 > 0) {
-                        bankSharedTo = "C5";
-                        bankSharedAmount = finalLentToOther.C4;
-                    }
-                } else if (slot === "C5") {
-                    if (finalBorrowedFromOther.C5 > 0) {
-                        bankBorrowedFrom = "C4";
-                        bankBorrowedAmount = finalBorrowedFromOther.C5;
-                    }
-                }
-
-                const transmissionLoss = windmillLossesMap[wmNumber] || 0;
-                const bankingLoss = globalBankingLoss;
-
-                // Calculate transmission loss and banking loss as percentages of the surplus (Added banking)
-                const adjSurplus = adjustedSurpluses[slot];
-                const slotAddedBanking = parseFloat(
-                    (
-                        adjSurplus +
-                        (adjSurplus * transmissionLoss) / 100 -
-                        (adjSurplus * bankingLoss) / 100
-                    ).toFixed(2)
-                );
-
-                const slotBalance = parseFloat((slotBanking - slotUtilizedBanking + slotAddedBanking).toFixed(2));
 
                 // Update running balance for next month's banking (using EB Banking units)
                 runningBalances[balanceKey] = val.eb;
@@ -502,22 +343,12 @@ export default function BankReport() {
                     slot,
                     banking: slotBanking,
                     powerplant: val.pp,
-                    utilized: val.ut,
-                    utilizedBanking: slotUtilizedBanking,
-                    addedBanking: slotAddedBanking,
-                    balance: slotBalance,
-                    transmissionLoss,
-                    bankingLoss,
+                    aoPowerplantUtilized: val.aoPP,
+                    aoBankingUtilized: val.aoBank,
+                    aoBalanceBanking: val.aoBal,
+                    transmissionLoss: windmillLossesMap[wmNumber] || 0,
+                    bankingLoss: globalBankingLoss,
                     ebBanking: val.eb,
-                    initDiff,
-                    ppBorrowedFrom,
-                    ppBorrowedAmount,
-                    ppSharedTo,
-                    ppSharedAmount,
-                    bankBorrowedFrom,
-                    bankBorrowedAmount,
-                    bankSharedTo,
-                    bankSharedAmount
                 };
             });
         });
@@ -566,10 +397,9 @@ export default function BankReport() {
                     "Slot": row.slot,
                     "Opening Banking": row.banking,
                     "Powerplant": row.powerplant,
-                    "Total Utilized": row.utilized,
-                    "Utilized Banking": row.utilizedBanking,
-                    "Added Banking": row.addedBanking,
-                    "Closing Banking": row.balance,
+                    "Powerplant Utilized": row.aoPowerplantUtilized,
+                    "Banking Utilized": row.aoBankingUtilized,
+                    "Balance Banking": row.aoBalanceBanking,
                     "EB Banking": row.ebBanking
                 });
             });
@@ -596,22 +426,36 @@ export default function BankReport() {
         (sum, month) => sum + month.records.reduce((mSum, r) => mSum + r.powerplant, 0),
         0
     );
-    const globalUtilized = filteredDataList.reduce(
-        (sum, month) => sum + month.records.reduce((mSum, r) => mSum + r.utilized, 0),
+    const globalAoPowerplantUtilized = filteredDataList.reduce(
+        (sum, month) => sum + month.records.reduce((mSum, r) => mSum + r.aoPowerplantUtilized, 0),
         0
     );
-    const globalUtilizedBanking = filteredDataList.reduce(
-        (sum, month) => sum + month.records.reduce((mSum, r) => mSum + r.utilizedBanking, 0),
+    const globalEbBanking = filteredDataList.reduce(
+        (sum, month) => sum + month.records.reduce((mSum, r) => mSum + r.ebBanking, 0),
         0
     );
-    const globalAddedBanking = filteredDataList.reduce(
-        (sum, month) => sum + month.records.reduce((mSum, r) => mSum + r.addedBanking, 0),
+    const globalAoBankingUtilized = filteredDataList.reduce(
+        (sum, month) => sum + month.records.reduce((mSum, r) => mSum + r.aoBankingUtilized, 0),
         0
     );
-    const globalBalance = filteredDataList.reduce(
-        (sum, month) => sum + month.records.reduce((mSum, r) => mSum + r.balance, 0),
+    const globalAoBalanceBanking = filteredDataList.reduce(
+        (sum, month) => sum + month.records.reduce((mSum, r) => mSum + r.aoBalanceBanking, 0),
         0
     );
+
+    // Find the EB Banking total of the last month where all values are filled
+    const lastFilledMonthEbBanking = (() => {
+        for (let i = filteredDataList.length - 1; i >= 0; i--) {
+            const month = filteredDataList[i];
+            if (month.records.length > 0 && month.records.every(r =>
+                r.banking !== 0 || r.powerplant !== 0 || r.aoPowerplantUtilized !== 0 ||
+                r.aoBankingUtilized !== 0 || r.aoBalanceBanking !== 0 || r.ebBanking !== 0
+            )) {
+                return month.records.reduce((sum, r) => sum + r.ebBanking, 0);
+            }
+        }
+        return 0;
+    })();
 
     return (
         <div className="p-6 bg-slate-50 min-h-screen font-sans">
@@ -622,22 +466,12 @@ export default function BankReport() {
                             <FileText className="h-5 w-5 text-indigo-600" />
                             Banking Report
                         </h1>
-                        {showAlternativeGrid && (
-                            <span className="text-base font-semibold text-slate-600 bg-red-50/50 border border-red-100 px-4 py-1.5 rounded-full flex items-center gap-2 shadow-sm">
-                                Available Banking Units:{" "}
-                                <span className="font-bold" style={{ color: 'firebrick' }}>
-                                    {(() => {
-                                        const lastGroupWithEb = [...filteredDataList].reverse().find(g =>
-                                            g.records.reduce((sum, r) => sum + r.ebBanking, 0) > 0
-                                        );
-                                        const lastMonthEbBankingSum = lastGroupWithEb
-                                            ? lastGroupWithEb.records.reduce((sum, r) => sum + r.ebBanking, 0)
-                                            : 0;
-                                        return lastMonthEbBankingSum.toLocaleString();
-                                    })()}
-                                </span>
+                        <span className="text-base font-semibold text-black">
+                            Total Banking units available as on date:{" "}
+                            <span style={{ color: "#CB4154" }} className="font-bold text-lg">
+                                {lastFilledMonthEbBanking.toLocaleString()}
                             </span>
-                        )}
+                        </span>
                     </div>
                     <button
                         onClick={handleExportExcel}
@@ -649,7 +483,7 @@ export default function BankReport() {
                 </div>
 
                 {/* Filters Section */}
-                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 mb-6 flex flex-wrap items-center justify-between gap-4">
+                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 mb-0 flex flex-wrap items-center justify-between gap-4">
                     {/* Left Actions (Radio buttons for Current Year / Financial Year) */}
                     <div className="flex items-center gap-6">
                         <label className="flex items-center gap-2 cursor-pointer select-none">
@@ -710,23 +544,6 @@ export default function BankReport() {
                             </>
                         ) : (
                             <>
-                                {/* Month Selector */}
-                                <div className="w-[140px]">
-                                    <Select value={selectedMonthFilter} onValueChange={setSelectedMonthFilter}>
-                                        <SelectTrigger className="bg-white border-slate-300 rounded-lg h-9">
-                                            <SelectValue placeholder="Select Month" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="all">Select Month</SelectItem>
-                                            {monthsList.map((m) => (
-                                                <SelectItem key={m} value={m}>
-                                                    {m}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-
                                 {/* Year Selector */}
                                 <div className="w-[120px]">
                                     <Select value={selectedYear} onValueChange={setSelectedYear}>
@@ -756,6 +573,23 @@ export default function BankReport() {
                                     {windmills.map((wm) => (
                                         <SelectItem key={wm} value={wm}>
                                             {wm}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        {/* Month Selector */}
+                        <div className="w-[140px]">
+                            <Select value={selectedMonthFilter} onValueChange={setSelectedMonthFilter}>
+                                <SelectTrigger className="bg-white border-slate-300 rounded-lg h-9">
+                                    <SelectValue placeholder="Select Month" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">Select Month</SelectItem>
+                                    {monthsList.map((m) => (
+                                        <SelectItem key={m} value={m}>
+                                            {m}
                                         </SelectItem>
                                     ))}
                                 </SelectContent>
@@ -792,48 +626,10 @@ export default function BankReport() {
                     </div>
                 </div>
 
-                {/* Summary Cards */}
-                {!showAlternativeGrid && (
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-6">
-                        {/* Added Banking Card */}
-                        <div className="p-5 bg-cyan-50/50 border border-cyan-100/80 rounded-xl flex flex-col items-center justify-center transition-all duration-300 hover:bg-cyan-50 hover:-translate-y-1 hover:shadow-md">
-                            <div className="flex items-center gap-2 mb-2">
-                                <PlusCircle className="h-5 w-5 text-cyan-600" />
-                                <span className="text-sm font-semibold text-cyan-700">Added Banking</span>
-                            </div>
-                            <span className="text-2xl font-bold text-cyan-900">
-                                {globalAddedBanking.toLocaleString()}
-                            </span>
-                        </div>
-
-                        {/* Utilized Banking Card */}
-                        <div className="p-5 bg-rose-50/50 border border-rose-100/80 rounded-xl flex flex-col items-center justify-center transition-all duration-300 hover:bg-rose-50 hover:-translate-y-1 hover:shadow-md">
-                            <div className="flex items-center gap-2 mb-2">
-                                <TrendingDown className="h-5 w-5 text-rose-600" />
-                                <span className="text-sm font-semibold text-rose-700">Utilized Banking</span>
-                            </div>
-                            <span className="text-2xl font-bold text-rose-900">
-                                {globalUtilizedBanking.toLocaleString()}
-                            </span>
-                        </div>
-
-                        {/* Closing Balance Card */}
-                        <div className="p-5 bg-blue-50/50 border border-blue-100/80 rounded-xl flex flex-col items-center justify-center transition-all duration-300 hover:bg-blue-50 hover:-translate-y-1 hover:shadow-md">
-                            <div className="flex flex-col items-center text-center gap-1 mb-2">
-                                <div className="flex items-center gap-2">
-                                    <Wallet className="h-5 w-5 text-blue-600" />
-                                    <span className="text-sm font-semibold text-blue-700">Closing Banking</span>
-                                </div>
-                                <span className="text-[10px] text-slate-500 font-normal normal-case">
-                                    (Added Banking - Utilized Banking)
-                                </span>
-                            </div>
-                            <span className="text-2xl font-bold text-blue-900">
-                                {(globalAddedBanking - globalUtilizedBanking).toLocaleString()}
-                            </span>
-                        </div>
-                    </div>
-                )}
+                {/* Warning Label */}
+                <p className="text-sm font-semibold mb-0 mt-0 text-right" style={{ color: "#CB4154" }}>
+                    Upload EB Statements and Allotment Orders for all months till date to get the complete report.
+                </p>
 
                 {/* Collapsible Grid Table */}
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-6">
@@ -853,27 +649,18 @@ export default function BankReport() {
                                     <TableHead className="font-semibold text-xs tracking-wider uppercase text-slate-200 bg-sidebar text-right sticky top-0 z-20 border-r border-white/10">
                                         Opening Banking
                                     </TableHead>
-                                    {!showAlternativeGrid && (
-                                        <>
-                                            <TableHead className="font-semibold text-xs tracking-wider uppercase text-slate-200 bg-sidebar text-right sticky top-0 z-20 border-r border-white/10">
-                                                Powerplant
-                                            </TableHead>
-                                            <TableHead className="font-semibold text-xs tracking-wider uppercase text-slate-200 bg-sidebar text-right sticky top-0 z-20 border-r border-white/10">
-                                                Total Utilized
-                                            </TableHead>
-                                        </>
-                                    )}
                                     <TableHead className="font-semibold text-xs tracking-wider uppercase text-slate-200 bg-sidebar text-right sticky top-0 z-20 border-r border-white/10">
-                                        Utilized Banking
+                                        Powerplant
                                     </TableHead>
                                     <TableHead className="font-semibold text-xs tracking-wider uppercase text-slate-200 bg-sidebar text-right sticky top-0 z-20 border-r border-white/10">
-                                        Added Banking
+                                        Powerplant Utilized
                                     </TableHead>
-                                    {!showAlternativeGrid && (
-                                        <TableHead className="font-semibold text-xs tracking-wider uppercase text-slate-200 bg-sidebar text-right sticky top-0 z-20 border-r border-white/10">
-                                            Closing Banking
-                                        </TableHead>
-                                    )}
+                                    <TableHead className="font-semibold text-xs tracking-wider uppercase text-slate-200 bg-sidebar text-right sticky top-0 z-20 border-r border-white/10">
+                                        Banking Utilized
+                                    </TableHead>
+                                    <TableHead className="font-semibold text-xs tracking-wider uppercase text-slate-200 bg-sidebar text-right sticky top-0 z-20 border-r border-white/10">
+                                        Balance Banking
+                                    </TableHead>
                                     <TableHead className="font-semibold text-xs tracking-wider uppercase text-slate-200 bg-sidebar text-right sticky top-0 z-20">
                                         EB Banking
                                     </TableHead>
@@ -886,13 +673,10 @@ export default function BankReport() {
                                     // Calculate totals for the group row
                                     const totalBanking = group.records.reduce((sum, r) => sum + r.banking, 0);
                                     const totalPowerplant = group.records.reduce((sum, r) => sum + r.powerplant, 0);
-                                    const totalUtilized = group.records.reduce((sum, r) => sum + r.utilized, 0);
-                                    const totalUtilizedBanking = group.records.reduce((sum, r) => sum + r.utilizedBanking, 0);
-                                    const totalAddedBanking = group.records.reduce((sum, r) => sum + r.addedBanking, 0);
-                                    const totalBalance = group.records.reduce((sum, r) => sum + r.balance, 0);
+                                    const totalAoPowerplantUtilized = group.records.reduce((sum, r) => sum + r.aoPowerplantUtilized, 0);
+                                    const totalAoBankingUtilized = group.records.reduce((sum, r) => sum + r.aoBankingUtilized, 0);
+                                    const totalAoBalanceBanking = group.records.reduce((sum, r) => sum + r.aoBalanceBanking, 0);
                                     const totalEbBanking = group.records.reduce((sum, r) => sum + r.ebBanking, 0);
-                                    const totalAltUtilized = group.records.reduce((sum, r) => sum + Math.max(0, r.banking - r.ebBanking), 0);
-                                    const totalAltAdded = group.records.reduce((sum, r) => sum + Math.max(0, r.ebBanking - r.banking), 0);
                                     const uniqueWindmillsCount = new Set(group.records.map(r => r.windmillNumber)).size;
 
                                     return (
@@ -914,27 +698,18 @@ export default function BankReport() {
                                                 <TableCell className={`py-3 px-4 text-right font-bold border-b border-slate-200 border-r border-slate-200 ${totalBanking < 0 ? "text-red-600" : "text-black"}`}>
                                                     {totalBanking.toLocaleString()}
                                                 </TableCell>
-                                                {!showAlternativeGrid && (
-                                                    <>
-                                                        <TableCell className={`py-3 px-4 text-right font-bold border-b border-slate-200 border-r border-slate-200 ${totalPowerplant < 0 ? "text-red-600" : "text-black"}`}>
-                                                            {totalPowerplant.toLocaleString()}
-                                                        </TableCell>
-                                                        <TableCell className={`py-3 px-4 text-right font-bold border-b border-slate-200 border-r border-slate-200 ${totalUtilized < 0 ? "text-red-600" : "text-black"}`}>
-                                                            {totalUtilized.toLocaleString()}
-                                                        </TableCell>
-                                                    </>
-                                                )}
-                                                <TableCell className={`py-3 px-4 text-right font-bold border-b border-slate-200 border-r border-slate-200 ${(showAlternativeGrid ? totalAltUtilized : totalUtilizedBanking) < 0 ? "text-red-600" : "text-black"}`}>
-                                                    {(showAlternativeGrid ? totalAltUtilized : totalUtilizedBanking).toLocaleString()}
+                                                <TableCell className={`py-3 px-4 text-right font-bold border-b border-slate-200 border-r border-slate-200 ${totalPowerplant < 0 ? "text-red-600" : "text-black"}`}>
+                                                    {totalPowerplant.toLocaleString()}
                                                 </TableCell>
-                                                <TableCell className={`py-3 px-4 text-right font-bold border-b border-slate-200 border-r border-slate-200 ${(showAlternativeGrid ? totalAltAdded : totalAddedBanking) < 0 ? "text-red-600" : "text-black"}`}>
-                                                    {(showAlternativeGrid ? totalAltAdded : totalAddedBanking).toLocaleString()}
+                                                <TableCell className={`py-3 px-4 text-right font-bold border-b border-slate-200 border-r border-slate-200 ${totalAoPowerplantUtilized < 0 ? "text-red-600" : "text-black"}`}>
+                                                    {totalAoPowerplantUtilized.toLocaleString()}
                                                 </TableCell>
-                                                {!showAlternativeGrid && (
-                                                    <TableCell className={`py-3 px-4 text-right font-bold border-b border-slate-200 border-r border-slate-200 ${totalBalance < 0 ? "text-red-600" : "text-black"}`}>
-                                                        {totalBalance.toLocaleString()}
-                                                    </TableCell>
-                                                )}
+                                                <TableCell className={`py-3 px-4 text-right font-bold border-b border-slate-200 border-r border-slate-200 ${totalAoBankingUtilized < 0 ? "text-red-600" : "text-black"}`}>
+                                                    {totalAoBankingUtilized.toLocaleString()}
+                                                </TableCell>
+                                                <TableCell className={`py-3 px-4 text-right font-bold border-b border-slate-200 border-r border-slate-200 ${totalAoBalanceBanking < 0 ? "text-red-600" : "text-black"}`}>
+                                                    {totalAoBalanceBanking.toLocaleString()}
+                                                </TableCell>
                                                 <TableCell className={`py-3 px-4 text-right font-bold border-b border-slate-200 ${totalEbBanking < 0 ? "text-red-600" : "text-black"}`}>
                                                     {totalEbBanking.toLocaleString()}
                                                 </TableCell>
@@ -947,13 +722,6 @@ export default function BankReport() {
                                                         const firstIdx = group.records.findIndex(r => r.windmillNumber === row.windmillNumber);
                                                         const count = group.records.filter(r => r.windmillNumber === row.windmillNumber).length;
                                                         const isFirst = index === firstIdx;
-
-                                                        const baseSurplus = row.powerplant > row.utilized ? row.powerplant - row.utilized : 0;
-                                                        const transLossUnits = parseFloat(((baseSurplus * row.transmissionLoss) / 100).toFixed(2));
-                                                        const bankLossUnits = parseFloat(((baseSurplus * row.bankingLoss) / 100).toFixed(2));
-
-                                                        const altUtilized = Math.max(0, row.banking - row.ebBanking);
-                                                        const altAdded = Math.max(0, row.ebBanking - row.banking);
 
                                                         return (
                                                             <TableRow
@@ -985,152 +753,18 @@ export default function BankReport() {
                                                                 <TableCell className={`py-2.5 px-4 text-right border-b border-slate-200 border-r border-slate-200 ${row.banking < 0 ? "text-red-600" : "text-black"}`}>
                                                                     {row.banking.toLocaleString()}
                                                                 </TableCell>
-                                                                {!showAlternativeGrid && (
-                                                                    <>
-                                                                        <TableCell className={`py-2.5 px-4 text-right border-b border-slate-200 border-r border-slate-200 ${row.powerplant < 0 ? "text-red-600" : "text-black"}`}>
-                                                                            {row.powerplant.toLocaleString()}
-                                                                        </TableCell>
-                                                                        <TableCell className={`py-2.5 px-4 text-right border-b border-slate-200 border-r border-slate-200 ${row.utilized < 0 ? "text-red-600" : "text-black"}`}>
-                                                                            {row.utilized.toLocaleString()}
-                                                                        </TableCell>
-                                                                    </>
-                                                                )}
-                                                                {showAlternativeGrid ? (
-                                                                    <TableCell className={`py-2.5 px-4 text-right border-b border-slate-200 border-r border-slate-200 ${altUtilized < 0 ? "text-red-600" : "text-black"}`}>
-                                                                        {altUtilized.toLocaleString()}
-                                                                    </TableCell>
-                                                                ) : (
-                                                                    <TableCell className={`py-2.5 px-4 text-right border-b border-slate-200 border-r border-slate-200 cursor-help ${row.utilizedBanking < 0 ? "text-red-600" : "text-black"}`}>
-                                                                        <Tooltip>
-                                                                            <TooltipTrigger asChild>
-                                                                                <span className="block w-full">
-                                                                                    {row.utilizedBanking.toLocaleString()}
-                                                                                </span>
-                                                                            </TooltipTrigger>
-                                                                            <TooltipContent className="bg-white text-slate-900 border border-slate-200 shadow-md p-3 text-sm rounded-md font-sans leading-relaxed z-50 text-left">
-                                                                                {(() => {
-                                                                                    const initDiffVal = row.initDiff ?? 0;
-                                                                                    const initDeficit = initDiffVal < 0 ? -initDiffVal : 0;
-                                                                                    const ownUse = initDeficit > 0 ? Math.min(initDeficit - (row.ppBorrowedAmount || 0), row.banking) : 0;
-                                                                                    const unmet = initDeficit - (row.ppBorrowedAmount || 0) - ownUse - (row.bankBorrowedAmount || 0);
-
-                                                                                    return (
-                                                                                        <div className="space-y-1">
-                                                                                            <div>
-                                                                                                Total Utilized Banking: <span className="font-semibold" style={{ color: 'firebrick' }}>{row.utilizedBanking.toLocaleString()}</span> units.
-                                                                                            </div>
-                                                                                            {initDeficit > 0 && (
-                                                                                                <>
-                                                                                                    <div>
-                                                                                                        • (Powerplant - Total utilized): <span className="font-semibold" style={{ color: 'firebrick' }}>{initDeficit.toLocaleString()}</span> units
-                                                                                                    </div>
-                                                                                                    {(row.ppBorrowedAmount || 0) > 0 && (
-                                                                                                        <div>
-                                                                                                            • Powerplant Borrowed: <span className="font-semibold" style={{ color: 'firebrick' }}>{row.ppBorrowedAmount?.toLocaleString()}</span> units from slot {row.ppBorrowedFrom}
-                                                                                                        </div>
-                                                                                                    )}
-                                                                                                    {(row.ppBorrowedAmount || 0) > 0 && (
-                                                                                                        <div>
-                                                                                                            • Net Deficit to cover from banking: <span className="font-semibold" style={{ color: 'firebrick' }}>{(initDeficit - (row.ppBorrowedAmount || 0)).toLocaleString()}</span> units
-                                                                                                        </div>
-                                                                                                    )}
-                                                                                                    <div>
-                                                                                                        • Utilized from {row.slot} banking: <span className="font-semibold" style={{ color: 'firebrick' }}>{ownUse.toLocaleString()}</span> units
-                                                                                                    </div>
-                                                                                                    {(row.bankBorrowedAmount || 0) > 0 && (
-                                                                                                        <div>
-                                                                                                            • Borrowed from slot {row.bankBorrowedFrom} banking: <span className="font-semibold" style={{ color: 'firebrick' }}>{row.bankBorrowedAmount?.toLocaleString()}</span> units
-                                                                                                        </div>
-                                                                                                    )}
-                                                                                                    {unmet > 0 && (
-                                                                                                        <div>
-                                                                                                            • Un-met deficit (negative balance): <span className="font-semibold" style={{ color: 'firebrick' }}>{unmet.toLocaleString()}</span> units
-                                                                                                        </div>
-                                                                                                    )}
-                                                                                                </>
-                                                                                            )}
-                                                                                            {initDeficit <= 0 && (row.ppSharedAmount || 0) > 0 && (
-                                                                                                <div>
-                                                                                                    • Powerplant Shared: Lent <span className="font-semibold" style={{ color: 'firebrick' }}>{row.ppSharedAmount?.toLocaleString()}</span> units to slot {row.ppSharedTo}
-                                                                                                </div>
-                                                                                            )}
-                                                                                            {(row.bankSharedAmount || 0) > 0 && (
-                                                                                                <div>
-                                                                                                    • Given to {row.bankSharedTo?.toLowerCase() || ''}: <span className="font-semibold" style={{ color: 'firebrick' }}>{row.bankSharedAmount?.toLocaleString()}</span> units
-                                                                                                </div>
-                                                                                            )}
-                                                                                        </div>
-                                                                                    );
-                                                                                })()}
-                                                                            </TooltipContent>
-                                                                        </Tooltip>
-                                                                    </TableCell>
-                                                                )}
-                                                                {showAlternativeGrid ? (
-                                                                    <TableCell className={`py-2.5 px-4 text-right border-b border-slate-200 border-r border-slate-200 ${altAdded < 0 ? "text-red-600" : "text-black"}`}>
-                                                                        {altAdded.toLocaleString()}
-                                                                    </TableCell>
-                                                                ) : (
-                                                                    <TableCell className={`py-2.5 px-4 text-right border-b border-slate-200 border-r border-slate-200 cursor-help ${row.addedBanking < 0 ? "text-red-600" : "text-black"}`}>
-                                                                        <Tooltip>
-                                                                            <TooltipTrigger asChild>
-                                                                                <span className="block w-full">
-                                                                                    {row.addedBanking.toLocaleString()}
-                                                                                </span>
-                                                                            </TooltipTrigger>
-                                                                            <TooltipContent className="bg-white text-slate-900 border border-slate-200 shadow-md p-3 text-sm rounded-md font-sans leading-relaxed z-50 text-left">
-                                                                                {(() => {
-                                                                                    const initDiffVal = row.initDiff ?? 0;
-                                                                                    const initSurplus = initDiffVal > 0 ? initDiffVal : 0;
-                                                                                    if (initSurplus === 0) {
-                                                                                        return <div>No surplus to add to banking.</div>;
-                                                                                    }
-                                                                                    const adjSurplus = initSurplus - (row.ppSharedAmount || 0);
-                                                                                    const transLossUnits = parseFloat(((adjSurplus * row.transmissionLoss) / 100).toFixed(2));
-                                                                                    const bankLossUnits = parseFloat(((adjSurplus * row.bankingLoss) / 100).toFixed(2));
-                                                                                    return (
-                                                                                        <div className="space-y-1">
-                                                                                            <div>
-                                                                                                Initial Powerplant Surplus: <span className="font-semibold" style={{ color: 'firebrick' }}>{initSurplus.toLocaleString()}</span> units.
-                                                                                            </div>
-                                                                                            {(row.ppSharedAmount || 0) > 0 && (
-                                                                                                <div>
-                                                                                                    • Shared with slot {row.ppSharedTo} deficit: <span className="font-semibold" style={{ color: 'firebrick' }}>{row.ppSharedAmount?.toLocaleString()}</span> units
-                                                                                                </div>
-                                                                                            )}
-                                                                                            <div>
-                                                                                                • Adjusted surplus base: <span className="font-semibold" style={{ color: 'firebrick' }}>{adjSurplus.toLocaleString()}</span> units
-                                                                                            </div>
-                                                                                            <div>
-                                                                                                • Transmission Loss (+{row.transmissionLoss}%): +<span className="font-semibold" style={{ color: 'firebrick' }}>{transLossUnits.toLocaleString()}</span> units
-                                                                                            </div>
-                                                                                            <div>
-                                                                                                • Banking Loss (-{row.bankingLoss}%): -<span className="font-semibold" style={{ color: 'firebrick' }}>{bankLossUnits.toLocaleString()}</span> units
-                                                                                            </div>
-                                                                                            <div>
-                                                                                                Final Added Banking: <span className="font-semibold" style={{ color: 'firebrick' }}>{row.addedBanking.toLocaleString()}</span> units.
-                                                                                            </div>
-                                                                                        </div>
-                                                                                    );
-                                                                                })()}
-                                                                            </TooltipContent>
-                                                                        </Tooltip>
-                                                                    </TableCell>
-                                                                )}
-                                                                {!showAlternativeGrid && (
-                                                                    <TableCell className={`py-2.5 px-4 text-right border-b border-slate-200 border-r border-slate-200 cursor-help ${row.balance < 0 ? "text-red-600" : "text-black"}`}>
-                                                                        <Tooltip>
-                                                                            <TooltipTrigger asChild>
-                                                                                <span className="block w-full">
-                                                                                    {row.balance.toLocaleString()}
-                                                                                </span>
-                                                                            </TooltipTrigger>
-                                                                            <TooltipContent className="bg-white text-slate-900 border border-slate-200 shadow-md p-3 text-sm rounded-md font-sans leading-relaxed z-50 text-left">
-                                                                                Opening Banking (<span className="font-semibold" style={{ color: 'firebrick' }}>{row.banking.toLocaleString()}</span>) - Utilized Banking (<span className="font-semibold" style={{ color: 'firebrick' }}>{row.utilizedBanking.toLocaleString()}</span>) + Added Banking (<span className="font-semibold" style={{ color: 'firebrick' }}>{row.addedBanking.toLocaleString()}</span>) = <span className="font-semibold" style={{ color: 'firebrick' }}>{row.balance.toLocaleString()}</span>
-                                                                            </TooltipContent>
-                                                                        </Tooltip>
-                                                                    </TableCell>
-                                                                )}
+                                                                <TableCell className={`py-2.5 px-4 text-right border-b border-slate-200 border-r border-slate-200 ${row.powerplant < 0 ? "text-red-600" : "text-black"}`}>
+                                                                    {row.powerplant.toLocaleString()}
+                                                                </TableCell>
+                                                                <TableCell className={`py-2.5 px-4 text-right border-b border-slate-200 border-r border-slate-200 ${row.aoPowerplantUtilized < 0 ? "text-red-600" : "text-black"}`}>
+                                                                    {row.aoPowerplantUtilized.toLocaleString()}
+                                                                </TableCell>
+                                                                <TableCell className={`py-2.5 px-4 text-right border-b border-slate-200 border-r border-slate-200 ${row.aoBankingUtilized < 0 ? "text-red-600" : "text-black"}`}>
+                                                                    {row.aoBankingUtilized.toLocaleString()}
+                                                                </TableCell>
+                                                                <TableCell className={`py-2.5 px-4 text-right border-b border-slate-200 border-r border-slate-200 ${row.aoBalanceBanking < 0 ? "text-red-600" : "text-black"}`}>
+                                                                    {row.aoBalanceBanking.toLocaleString()}
+                                                                </TableCell>
                                                                 <TableCell className={`py-2.5 px-4 text-right border-b border-slate-200 ${row.ebBanking < 0 ? "text-red-600" : "text-black"}`}>
                                                                     {row.ebBanking.toLocaleString()}
                                                                 </TableCell>
@@ -1144,7 +778,7 @@ export default function BankReport() {
                                 })}
                                 {filteredDataList.every(g => g.records.length === 0) && (
                                     <TableRow>
-                                        <TableCell colSpan={showAlternativeGrid ? 7 : 10} className="text-center py-12 text-slate-400 bg-slate-50">
+                                        <TableCell colSpan={9} className="text-center py-12 text-slate-400 bg-slate-50">
                                             <div className="flex flex-col items-center justify-center gap-3">
                                                 <Search className="h-8 w-8 text-slate-300 stroke-[1.5]" />
                                                 <div>
@@ -1166,24 +800,6 @@ export default function BankReport() {
                             </TableBody>
                         </Table>
                     </div>
-                </div>
-
-                {/* Alternative Grid Toggle Button at the end of screen */}
-                <div className="flex justify-end mb-8">
-                    <button
-                        onClick={() => setShowAlternativeGrid(!showAlternativeGrid)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-lg shadow-sm transition-all active:scale-95 duration-150 cursor-pointer"
-                    >
-                        {showAlternativeGrid ? (
-                            <>
-                                <FileText className="h-3.5 w-3.5" />
-                            </>
-                        ) : (
-                            <>
-                                <Wallet className="h-3.5 w-3.5" />
-                            </>
-                        )}
-                    </button>
                 </div>
             </div>
         </div>

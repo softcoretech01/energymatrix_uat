@@ -142,16 +142,29 @@ def initialize_database():
                         with open(file_path, "r", encoding="utf-8") as f:
                             content = f.read()
                             
-                            delimiter = ';'
-                            if 'DELIMITER //' in content: delimiter = '//'
-                            elif 'DELIMITER $$' in content: delimiter = '$$'
+                            statements = []
+                            current_delimiter = ';'
+                            current_statement = []
+                            for line in content.splitlines():
+                                stripped = line.strip()
+                                if stripped.upper().startswith("DELIMITER"):
+                                    parts = stripped.split()
+                                    if len(parts) >= 2:
+                                        current_delimiter = parts[1]
+                                    continue
+                                current_statement.append(line)
+                                stmt_str = "\n".join(current_statement).strip()
+                                if stmt_str.endswith(current_delimiter):
+                                    clean_stmt = stmt_str[:-len(current_delimiter)].strip()
+                                    if clean_stmt:
+                                        statements.append(clean_stmt)
+                                    current_statement = []
+                            if current_statement:
+                                clean_stmt = "\n".join(current_statement).strip()
+                                if clean_stmt:
+                                    statements.append(clean_stmt)
                             
-                            content = re.sub(r"DELIMITER\s+\S+", "", content)
-                            statements = content.split(delimiter)
-                            
-                            for statement in statements:
-                                clean_s = statement.strip()
-                                if clean_s.endswith(';'): clean_s = clean_s[:-1].strip()
+                            for clean_s in statements:
                                 if clean_s:
                                     try:
                                         cursor.execute(clean_s)

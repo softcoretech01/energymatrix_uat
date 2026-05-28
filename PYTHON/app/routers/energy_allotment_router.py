@@ -5,6 +5,8 @@ import pymysql
 import os
 from uuid import uuid4
 import fastapi
+import pdfplumber
+import re
 
 router = APIRouter(
     prefix="/windmills",
@@ -257,22 +259,168 @@ async def upload_allotment_order(
 ):
     conn = None
     cursor = None
+    path = None
     try:
         conn = get_connection(db_name="windmill")
         cursor = conn.cursor()
 
-        UPLOAD_DIR = "uploads/allotment_orders"
+        # 1. Fetch expected windmill number
+        cursor.execute("SELECT windmill_number FROM masters.master_windmill WHERE id = %s", (windmill_id,))
+        wm_row = cursor.fetchone()
+        if not wm_row:
+            raise HTTPException(status_code=404, detail="Selected windmill not found")
+        expected_wm = str(wm_row[0]).strip().lower().lstrip('0')
+
+        UPLOAD_DIR = os.path.join("uploads", "allotment_orders", str(year), str(month))
         os.makedirs(UPLOAD_DIR, exist_ok=True)
         
         safe_name = os.path.basename(file.filename)
-        unique_name = f"{uuid4().hex}_{safe_name}"
-        path = os.path.join(UPLOAD_DIR, unique_name)
-        db_path = path.replace("\\\\", "/")
+        path = os.path.join(UPLOAD_DIR, safe_name)
+        db_path = path.replace("\\", "/")
 
         content = await file.read()
         with open(path, "wb") as buffer:
             buffer.write(content)
 
+        # 2. Extract & Validate PDF content
+        MONTH_MAP = {
+            "january": "1", "february": "2", "march": "3", "april": "4",
+            "may": "5", "june": "6", "july": "7", "august": "8",
+            "september": "9", "october": "10", "november": "11", "december": "12"
+        }
+        
+        try:
+            with pdfplumber.open(path) as pdf:
+                full_text = ""
+                tables = []
+                for page in pdf.pages:
+                    full_text += page.extract_text() + "\n"
+                    tables.extend(page.extract_tables())
+        except Exception as pdf_err:
+            if os.path.exists(path): os.remove(path)
+            raise HTTPException(status_code=400, detail=f"Failed to read PDF file: {str(pdf_err)}")
+
+        month_match = re.search(r"Statement Month\s+(\w+)", full_text, re.IGNORECASE)
+        year_match = re.search(r"Statement Year\s+(\d{4})", full_text, re.IGNORECASE)
+        service_match = re.search(r"Service Number/isRec\s+(\d+)", full_text, re.IGNORECASE)
+
+        pdf_month_name = month_match.group(1) if month_match else None
+        pdf_year = year_match.group(1) if year_match else None
+        pdf_service_no = service_match.group(1) if service_match else None
+
+        if not pdf_month_name or not pdf_year or not pdf_service_no:
+            if os.path.exists(path): os.remove(path)
+            raise HTTPException(
+                status_code=400, 
+                detail="Could not extract Statement Month, Year, or Service Number from PDF. Please ensure this is a valid Allotment Order PDF."
+            )
+
+        pdf_month_num = MONTH_MAP.get(pdf_month_name.lower())
+        if not pdf_month_num:
+            if os.path.exists(path): os.remove(path)
+            raise HTTPException(status_code=400, detail=f"Invalid statement month '{pdf_month_name}' found in PDF.")
+
+        # Normalize and validate period
+        try:
+            ui_month_int = int(month)
+            pdf_month_int = int(pdf_month_num)
+            ui_year_int = int(year)
+            pdf_year_int = int(pdf_year)
+        except ValueError:
+            if os.path.exists(path): os.remove(path)
+            raise HTTPException(status_code=400, detail="Invalid period selected.")
+
+        if ui_month_int != pdf_month_int or ui_year_int != pdf_year_int:
+            month_names = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+            ui_month_name = month_names[ui_month_int - 1] if 1 <= ui_month_int <= 12 else str(month)
+            if os.path.exists(path): os.remove(path)
+            raise HTTPException(
+                status_code=400,
+                detail=f"Period Mismatch: PDF is for {pdf_month_name} {pdf_year}, but you selected {ui_month_name} {year}."
+            )
+
+        # Validate windmill number
+        pdf_wm = pdf_service_no.strip().lower().lstrip('0')
+        if expected_wm != pdf_wm:
+            if os.path.exists(path): os.remove(path)
+            raise HTTPException(
+                status_code=400,
+                detail=f"Windmill Mismatch: Selected windmill number is {wm_row[0]}, but PDF is for {pdf_service_no}."
+            )
+
+        # 3. Parse tables
+        def clean_val(val):
+            if not val: return 0.0
+            val_str = str(val).replace(",", "").strip()
+            try:
+                return float(val_str)
+            except ValueError:
+                return 0.0
+
+        table1 = None
+        table2 = None
+        for table in tables:
+            if not table or len(table) < 2: continue
+            first_row = [str(cell).strip().upper() if cell else "" for cell in table[0]]
+            if "SOURCE" in first_row:
+                table1 = table
+            elif "EXCESS UNITS" in first_row:
+                table2 = table
+
+        slots_data = {}
+        for i in range(1, 6):
+            slots_data[i] = {
+                "from_powerplant": 0.0,
+                "from_banking": 0.0,
+                "total": 0.0,
+                "balance_banking": 0.0,
+                "balance_lapsed": 0.0,
+                "balance_surplus": 0.0
+            }
+
+        if table1:
+            header = [str(c).strip().upper() for c in table1[0]]
+            col_indices = {}
+            for s in ['C1', 'C2', 'C3', 'C4', 'C5']:
+                if s in header: col_indices[s] = header.index(s)
+            
+            for row in table1[1:]:
+                row_label = str(row[0]).strip().upper() if row[0] else ""
+                if "FROM POWERPLANT" in row_label:
+                    for s_num, s_name in [(1, 'C1'), (2, 'C2'), (3, 'C3'), (4, 'C4'), (5, 'C5')]:
+                        if s_name in col_indices:
+                            slots_data[s_num]["from_powerplant"] = clean_val(row[col_indices[s_name]])
+                elif "FROM BANKING" in row_label:
+                    for s_num, s_name in [(1, 'C1'), (2, 'C2'), (3, 'C3'), (4, 'C4'), (5, 'C5')]:
+                        if s_name in col_indices:
+                            slots_data[s_num]["from_banking"] = clean_val(row[col_indices[s_name]])
+                elif "TOTAL" in row_label:
+                    for s_num, s_name in [(1, 'C1'), (2, 'C2'), (3, 'C3'), (4, 'C4'), (5, 'C5')]:
+                        if s_name in col_indices:
+                            slots_data[s_num]["total"] = clean_val(row[col_indices[s_name]])
+
+        if table2:
+            header = [str(c).strip().upper() for c in table2[0]]
+            col_indices = {}
+            for s in ['C1', 'C2', 'C3', 'C4', 'C5']:
+                if s in header: col_indices[s] = header.index(s)
+
+            for row in table2[1:]:
+                row_label = str(row[0]).strip().upper() if row[0] else ""
+                if "BANKING" in row_label:
+                    for s_num, s_name in [(1, 'C1'), (2, 'C2'), (3, 'C3'), (4, 'C4'), (5, 'C5')]:
+                        if s_name in col_indices:
+                            slots_data[s_num]["balance_banking"] = clean_val(row[col_indices[s_name]])
+                elif "LAPSED" in row_label:
+                    for s_num, s_name in [(1, 'C1'), (2, 'C2'), (3, 'C3'), (4, 'C4'), (5, 'C5')]:
+                        if s_name in col_indices:
+                            slots_data[s_num]["balance_lapsed"] = clean_val(row[col_indices[s_name]])
+                elif "SURPLUS-STB" in row_label or "SURPLUS" in row_label:
+                    for s_num, s_name in [(1, 'C1'), (2, 'C2'), (3, 'C3'), (4, 'C4'), (5, 'C5')]:
+                        if s_name in col_indices:
+                            slots_data[s_num]["balance_surplus"] = clean_val(row[col_indices[s_name]])
+
+        # 4. Insert/Update header record via SP
         cursor.callproc("sp_upload_allotment_order", (
             windmill_id,
             year,
@@ -281,16 +429,122 @@ async def upload_allotment_order(
             safe_name,
             user["id"]
         ))
+
+        # 5. Retrieve header id
+        cursor.execute("""
+            SELECT id FROM windmill.allotment_order_upload
+            WHERE windmill_id = %s AND year = %s AND month = %s
+        """, (windmill_id, year, month))
+        upload_row = cursor.fetchone()
+        if not upload_row:
+            raise Exception("Failed to retrieve upload header ID.")
+        upload_header_id = upload_row[0]
+
+        # 6. Delete and Insert slot details
+        cursor.execute("DELETE FROM windmill.allotment_order_details WHERE allotment_order_id = %s", (upload_header_id,))
         
+        for s_num in range(1, 6):
+            s_data = slots_data[s_num]
+            cursor.execute("""
+                INSERT INTO windmill.allotment_order_details (
+                    allotment_order_id, slots, from_powerplant, from_banking, total,
+                    balance_banking, balance_lapsed, balance_surplus, created_by, created_at
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+            """, (
+                upload_header_id,
+                s_num,
+                s_data["from_powerplant"],
+                s_data["from_banking"],
+                s_data["total"],
+                s_data["balance_banking"],
+                s_data["balance_lapsed"],
+                s_data["balance_surplus"],
+                user["id"]
+            ))
+
         conn.commit()
         return {"status": "success", "message": "Allotment order uploaded successfully", "file_name": safe_name, "file_path": db_path}
 
+    except HTTPException as he:
+        if conn: conn.rollback()
+        raise he
     except Exception as e:
         if conn: conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         if cursor: cursor.close()
         if conn: conn.close()
+
+@router.get("/allotment-order/details")
+async def get_allotment_order_details(
+    windmill_id: int,
+    year: int,
+    month: str,
+    user: dict = Depends(get_current_user)
+):
+    conn = None
+    cursor = None
+    try:
+        conn = get_connection(db_name="windmill")
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        
+        # 1. Fetch header record
+        query_header = """
+            SELECT id, windmill_id, year, month, file_path, file_name, created_at, created_by
+            FROM windmill.allotment_order_upload
+            WHERE windmill_id = %s AND year = %s AND month = %s
+        """
+        cursor.execute(query_header, (windmill_id, year, month))
+        header = cursor.fetchone()
+        
+        if not header:
+            return {"status": "success", "data": None}
+            
+        # 2. Fetch details records
+        query_details = """
+            SELECT id, allotment_order_id, slots, from_powerplant, from_banking, total,
+                   balance_banking, balance_lapsed, balance_surplus, created_at, created_by
+            FROM windmill.allotment_order_details
+            WHERE allotment_order_id = %s
+            ORDER BY slots ASC
+        """
+        cursor.execute(query_details, (header["id"],))
+        details = cursor.fetchall()
+        
+        # Clean decimal/datetime values
+        cleaned_details = []
+        for d in details:
+            clean = {}
+            for k, v in d.items():
+                from decimal import Decimal
+                if isinstance(v, Decimal):
+                    clean[k] = float(v)
+                else:
+                    clean[k] = v
+            cleaned_details.append(clean)
+            
+        # Clean header datetime
+        cleaned_header = {}
+        for k, v in header.items():
+            from datetime import datetime
+            if isinstance(v, datetime):
+                cleaned_header[k] = v.isoformat()
+            else:
+                cleaned_header[k] = v
+
+        return {
+            "status": "success",
+            "data": {
+                "header": cleaned_header,
+                "details": cleaned_details
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if cursor: cursor.close()
+        if conn: conn.close()
+
 
 @router.get("/allotment-order/list")
 async def get_allotment_orders(

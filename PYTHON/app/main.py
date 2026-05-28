@@ -132,6 +132,4 @@ app.include_router(audit_router, prefix="/api", dependencies=auth_dep)
 app.include_router(error_log_router, prefix="/api")
 app.include_router(session_router, prefix="/api", dependencies=auth_dep)
 app.include_router(login_log_router, prefix="/api", dependencies=auth_dep)
-app.include_router(banking_router, prefix="/api", dependencies=auth_dep)
-
-
+app.include_router(banking_router, prefix="/api", dependencies=auth_dep)# Touch to trigger reload: update sp_get_banking_utilized
