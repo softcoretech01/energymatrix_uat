@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import api from "@/services/api";
+import api, { BACKEND_URL, BACKEND_UPLOAD_URL } from "@/services/api";
 import { useSidebar } from "@/components/ui/sidebar";
 import { Search, Edit, Eye, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -143,6 +143,14 @@ function EnergyAllotment() {
 
     // State for Uploads
     const [uploads, setUploads] = useState<Record<string, { file: File | null, fileName: string, filePath?: string }>>({});
+
+    const getUploadedFileUrl = (filePath?: string) => {
+        if (!filePath) return "#";
+        if (filePath.startsWith("http")) return filePath;
+        if (filePath.startsWith("/")) return `${BACKEND_URL}${filePath}`;
+        if (filePath.startsWith("uploads/")) return `${BACKEND_URL}/${filePath}`;
+        return `${BACKEND_UPLOAD_URL}/${filePath.replace(/^\/+/, "")}`;
+    };
 
     // Allotment Order Details Modal State
     const [selectedAllotmentDetails, setSelectedAllotmentDetails] = useState<any>(null);
@@ -2808,7 +2816,7 @@ function EnergyAllotment() {
                                                         <TableCell className="py-2 text-xs text-slate-700">
                                                             {uploads[wm]?.fileName ? (
                                                                 <a
-                                                                    href={uploads[wm]?.file ? URL.createObjectURL(uploads[wm].file!) : uploads[wm]?.filePath ? `http://localhost:8000/${uploads[wm].filePath}` : "#"}
+                                                                    href={uploads[wm]?.file ? URL.createObjectURL(uploads[wm].file!) : getUploadedFileUrl(uploads[wm]?.filePath)}
                                                                     target="_blank"
                                                                     rel="noopener noreferrer"
                                                                     className="text-blue-600 hover:text-blue-800 hover:underline cursor-pointer font-semibold text-xs"
