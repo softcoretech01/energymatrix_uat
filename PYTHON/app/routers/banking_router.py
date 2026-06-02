@@ -65,6 +65,55 @@ async def get_banking_utilized(year: int, mode: str = "financial", current_user:
                 "ea_bank_c4": float(ea["ea_bank_c4"]) if ea["ea_bank_c4"] is not None else 0.0,
                 "ea_bank_c5": float(ea["ea_bank_c5"]) if ea["ea_bank_c5"] is not None else 0.0,
             }
+
+        # 4a. Fetch Energy Allotment Total Allotted units per windmill/year/month
+        ea_allotted_query = """
+            SELECT 
+                mw.windmill_number,
+                h.year,
+                h.month,
+                COALESCE(SUM(d.allocated), 0) as total_allotted
+            FROM windmill.energy_allotment_header h
+            JOIN windmill.energy_allotment_details d ON h.allocation_id = d.allocation_id
+            JOIN masters.master_windmill mw ON h.windmill_id = mw.id
+            WHERE h.status = '1' AND d.status = '1'
+              AND LOWER(mw.type) = 'windmill'
+              AND (
+                (%(mode)s = 'financial' AND ((h.year = %(year)s AND h.month >= 4) OR (h.year = %(year)s + 1 AND h.month <= 3)))
+                OR
+                (%(mode)s = 'calendar' AND h.year = %(year)s)
+              )
+            GROUP BY mw.windmill_number, h.year, h.month
+        """
+        cursor.execute(ea_allotted_query, {"year": year, "mode": mode})
+        ea_allotted_rows = cursor.fetchall()
+        ea_allotted_lookup = {}
+        for row in ea_allotted_rows:
+            key = f"{str(row['windmill_number']).strip()}-{row['year']}-{row['month']}"
+            ea_allotted_lookup[key] = float(row["total_allotted"]) if row["total_allotted"] is not None else 0.0
+
+        # 4b. Fetch actual total calculated_wheeling_value per windmill/year/month
+        actual_query = """
+            SELECT 
+                TRIM(a.energy_number) as windmill_number,
+                a.actual_year as year,
+                a.actual_month as month,
+                COALESCE(SUM(a.calculated_wheeling_value), 0) as total_calculated_wheeling_value
+            FROM windmill.actual a
+            WHERE (
+                (%(mode)s = 'financial' AND ((a.actual_year = %(year)s AND a.actual_month >= 4) OR (a.actual_year = %(year)s + 1 AND a.actual_month <= 3)))
+                OR
+                (%(mode)s = 'calendar' AND a.actual_year = %(year)s)
+            )
+            GROUP BY TRIM(a.energy_number), a.actual_year, a.actual_month
+        """
+        cursor.execute(actual_query, {"year": year, "mode": mode})
+        actual_rows = cursor.fetchall()
+        actual_lookup = {}
+        for row in actual_rows:
+            if row.get("windmill_number"):
+                key = f"{str(row['windmill_number']).strip()}-{row['year']}-{row['month']}"
+                actual_lookup[key] = float(row["total_calculated_wheeling_value"]) if row["total_calculated_wheeling_value"] is not None else 0.0
         
         # Convert Decimal values to float and attach transmission_loss/banking_loss/ea_bank
         for r in rows:
@@ -92,6 +141,10 @@ async def get_banking_utilized(year: int, mode: str = "financial", current_user:
             r["ea_bank_c2"] = ea_data.get("ea_bank_c2", 0.0)
             r["ea_bank_c4"] = ea_data.get("ea_bank_c4", 0.0)
             r["ea_bank_c5"] = ea_data.get("ea_bank_c5", 0.0)
+            
+            # Attach total allotted and actual calculated wheeling value
+            r["ea_total_allotted"] = ea_allotted_lookup.get(ea_key, 0.0)
+            r["act_total_calculated_wheeling_value"] = actual_lookup.get(ea_key, 0.0)
                 
         return rows
     except Exception as e:

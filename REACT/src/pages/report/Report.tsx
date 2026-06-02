@@ -37,6 +37,9 @@ interface WindmillRecord {
     ownCalculatedEbBanking: number;
     ownOpeningBanking: number;
     hoverFormulaText: string;
+    balanceHoverText?: string;
+    ea_total_allotted?: number;
+    act_total_calculated_wheeling_value?: number;
 }
 
 interface MonthlyData {
@@ -84,6 +87,12 @@ export default function BankReport() {
         ao_bal_c2: number;
         ao_bal_c4: number;
         ao_bal_c5: number;
+        ea_bank_c1: number;
+        ea_bank_c2: number;
+        ea_bank_c4: number;
+        ea_bank_c5: number;
+        ea_total_allotted?: number;
+        act_total_calculated_wheeling_value?: number;
     }>>({});
 
     useEffect(() => {
@@ -165,6 +174,8 @@ export default function BankReport() {
                         ea_bank_c2: number;
                         ea_bank_c4: number;
                         ea_bank_c5: number;
+                        ea_total_allotted?: number;
+                        act_total_calculated_wheeling_value?: number;
                     }> = {};
                     response.data.forEach((item: any) => {
                         const key = `${item.year}-${item.month}-${String(item.windmill_number || "").trim()}`;
@@ -198,6 +209,8 @@ export default function BankReport() {
                             ea_bank_c2: Number(item.ea_bank_c2 || 0),
                             ea_bank_c4: Number(item.ea_bank_c4 || 0),
                             ea_bank_c5: Number(item.ea_bank_c5 || 0),
+                            ea_total_allotted: Number(item.ea_total_allotted || 0),
+                            act_total_calculated_wheeling_value: Number(item.act_total_calculated_wheeling_value || 0),
                         };
                     });
                     setUtilizedData(dataMap);
@@ -233,7 +246,7 @@ export default function BankReport() {
             "July", "August", "September", "October", "November", "December"
         ];
         allPossibleMonths.forEach((m) => {
-            initial[m] = true; // Expanded by default
+            initial[m] = false; // Collapsed by default
         });
         return initial;
     });
@@ -245,7 +258,7 @@ export default function BankReport() {
         }));
     };
 
-    const [allExpanded, setAllExpanded] = useState<boolean>(true);
+    const [allExpanded, setAllExpanded] = useState<boolean>(false);
 
     const toggleAllMonths = () => {
         const nextState = !allExpanded;
@@ -359,27 +372,9 @@ export default function BankReport() {
                 const balanceKey = `${wmNumber}-${slot}`;
                 const val = slotValues[slot];
                 const slotBanking = openingBanking[slot];
-                const slotOwnBanking = openingOwnBanking[slot];
 
                 // Update running balance for next month's banking (using EB Banking units)
                 runningBalances[balanceKey] = val.eb;
-
-                // Our Own Calculation:
-                const rawBankingUtilized = val.eaBank;
-                
-                const tlPct = windmillLossesMap[wmNumber] || 0;
-                const blPct = globalBankingLoss || 0;
-                const tlVal = rawBankingUtilized * (tlPct / 100);
-                const blVal = rawBankingUtilized * (blPct / 100);
-                
-                const ownCalculatedBankingUtilized = rawBankingUtilized - tlVal - blVal;
-                const hoverFormulaText = `${rawBankingUtilized.toFixed(2)} - ${tlPct}% TL - ${blPct}% BL = ${ownCalculatedBankingUtilized.toFixed(2)}`;
-
-                const ownCalculatedEbBanking = slotBanking - ownCalculatedBankingUtilized;
-                const balanceHoverText = `${slotBanking.toFixed(2)} (Opening Banking) - ${ownCalculatedBankingUtilized.toFixed(2)} (Banking Utilized) = ${ownCalculatedEbBanking.toFixed(2)} (Balance)`;
-
-                // Update running balance for next month's own calculation
-                runningOwnBalances[balanceKey] = ownCalculatedEbBanking;
 
                 return {
                     windmillNumber: wmNumber,
@@ -393,11 +388,13 @@ export default function BankReport() {
                     bankingLoss: globalBankingLoss,
                     ebBanking: val.eb,
                     ebStatementBankingUtilized: val.aoBank,
-                    ownCalculatedBankingUtilized,
-                    ownCalculatedEbBanking,
-                    ownOpeningBanking: slotOwnBanking,
-                    hoverFormulaText,
-                    balanceHoverText,
+                    ea_total_allotted: dbUtilized.ea_total_allotted ?? 0,
+                    act_total_calculated_wheeling_value: dbUtilized.act_total_calculated_wheeling_value ?? 0,
+                    ownCalculatedBankingUtilized: 0,
+                    ownCalculatedEbBanking: (dbUtilized.ea_total_allotted ?? 0) - (dbUtilized.act_total_calculated_wheeling_value ?? 0),
+                    ownOpeningBanking: 0,
+                    hoverFormulaText: "",
+                    balanceHoverText: "",
                 };
             });
         });
@@ -454,6 +451,8 @@ export default function BankReport() {
                         valC2: c2Rec?.banking ?? 0,
                         valC4: c4Rec?.banking ?? 0,
                         valC5: c5Rec?.banking ?? 0,
+                        isMerged: false,
+                        valTotal: 0
                     },
                     {
                         label: "Powerplant (EB Statement)",
@@ -461,6 +460,8 @@ export default function BankReport() {
                         valC2: c2Rec?.powerplant ?? 0,
                         valC4: c4Rec?.powerplant ?? 0,
                         valC5: c5Rec?.powerplant ?? 0,
+                        isMerged: false,
+                        valTotal: 0
                     },
                     {
                         label: "Powerplant Utilized (Allotment Order)",
@@ -468,6 +469,8 @@ export default function BankReport() {
                         valC2: c2Rec?.aoPowerplantUtilized ?? 0,
                         valC4: c4Rec?.aoPowerplantUtilized ?? 0,
                         valC5: c5Rec?.aoPowerplantUtilized ?? 0,
+                        isMerged: false,
+                        valTotal: 0
                     },
                     {
                         label: "Banking Utilized (Allotment Order)",
@@ -475,13 +478,8 @@ export default function BankReport() {
                         valC2: c2Rec?.ebStatementBankingUtilized ?? 0,
                         valC4: c4Rec?.ebStatementBankingUtilized ?? 0,
                         valC5: c5Rec?.ebStatementBankingUtilized ?? 0,
-                    },
-                    {
-                        label: "Banking Utilized (Our Own Calculation)",
-                        valC1: c1Rec?.ownCalculatedBankingUtilized ?? 0,
-                        valC2: c2Rec?.ownCalculatedBankingUtilized ?? 0,
-                        valC4: c4Rec?.ownCalculatedBankingUtilized ?? 0,
-                        valC5: c5Rec?.ownCalculatedBankingUtilized ?? 0,
+                        isMerged: false,
+                        valTotal: 0
                     },
                     {
                         label: "Balance Banking (Allotment Order)",
@@ -489,18 +487,22 @@ export default function BankReport() {
                         valC2: c2Rec?.ebBanking ?? 0,
                         valC4: c4Rec?.ebBanking ?? 0,
                         valC5: c5Rec?.ebBanking ?? 0,
+                        isMerged: false,
+                        valTotal: 0
                     },
                     {
                         label: "Balance Banking (Our Own Calculation)",
-                        valC1: c1Rec?.ownCalculatedEbBanking ?? 0,
-                        valC2: c2Rec?.ownCalculatedEbBanking ?? 0,
-                        valC4: c4Rec?.ownCalculatedEbBanking ?? 0,
-                        valC5: c5Rec?.ownCalculatedEbBanking ?? 0,
+                        valC1: "",
+                        valC2: "",
+                        valC4: "",
+                        valC5: "",
+                        isMerged: true,
+                        valTotal: ((c1Rec?.ea_total_allotted ?? 0) - (c1Rec?.act_total_calculated_wheeling_value ?? 0)) * (1 - (globalBankingLoss / 100))
                     },
                 ];
 
                 rowDefs.forEach((row) => {
-                    const totalVal = row.valC1 + row.valC2 + row.valC4 + row.valC5;
+                    const totalVal = row.isMerged ? row.valTotal : ((row.valC1 as number) + (row.valC2 as number) + (row.valC4 as number) + (row.valC5 as number));
                     exportData.push({
                         "Month": group.displayMonth,
                         "Windmill Number": wmNumber,
@@ -553,15 +555,21 @@ export default function BankReport() {
         0
     );
 
-    // Find the EB Banking total of the last month where all values are filled
-    const lastFilledMonthEbBanking = (() => {
-        for (let i = filteredDataList.length - 1; i >= 0; i--) {
-            const month = filteredDataList[i];
-            if (month.records.length > 0 && month.records.every(r =>
-                r.banking !== 0 || r.powerplant !== 0 || r.aoPowerplantUtilized !== 0 ||
-                r.aoBankingUtilized !== 0 || r.aoBalanceBanking !== 0 || r.ebBanking !== 0
-            )) {
-                return month.records.reduce((sum, r) => sum + r.ebBanking, 0);
+    // Find the EB Banking total of the current month (or fallback to the last filled month)
+    const currentMonthBankingUnits = (() => {
+        const currentMonthName = new Date().toLocaleString("en-US", { month: "long" });
+        const currentMonthData = monthlyDataList.find(m => m.monthName === currentMonthName);
+        if (currentMonthData && currentMonthData.records.length > 0) {
+            return currentMonthData.records.reduce((sum, r) => sum + r.ebBanking, 0);
+        }
+        // Fallback to the last filled month in monthlyDataList
+        for (let i = monthlyDataList.length - 1; i >= 0; i--) {
+            const month = monthlyDataList[i];
+            if (month.records.length > 0) {
+                const totalEbBanking = month.records.reduce((sum, r) => sum + r.ebBanking, 0);
+                if (totalEbBanking !== 0) {
+                    return totalEbBanking;
+                }
             }
         }
         return 0;
@@ -579,7 +587,7 @@ export default function BankReport() {
                         <span className="text-base font-semibold text-black">
                             Total Banking units available as on date:{" "}
                             <span style={{ color: "#CB4154" }} className="font-bold text-lg">
-                                {lastFilledMonthEbBanking.toLocaleString()}
+                                {currentMonthBankingUnits.toLocaleString()}
                             </span>
                         </span>
                     </div>
@@ -753,19 +761,19 @@ export default function BankReport() {
                                     <TableHead className="font-semibold text-xs tracking-wider uppercase text-slate-200 bg-sidebar text-left sticky top-0 z-20 border-r border-white/10">
                                         Particulars
                                     </TableHead>
-                                    <TableHead className="font-semibold text-xs tracking-wider uppercase text-slate-200 bg-sidebar text-right sticky top-0 z-20 border-r border-white/10">
+                                    <TableHead className="font-semibold text-xs tracking-wider uppercase text-slate-200 bg-sidebar text-center sticky top-0 z-20 border-r border-white/10">
                                         C1
                                     </TableHead>
-                                    <TableHead className="font-semibold text-xs tracking-wider uppercase text-slate-200 bg-sidebar text-right sticky top-0 z-20 border-r border-white/10">
+                                    <TableHead className="font-semibold text-xs tracking-wider uppercase text-slate-200 bg-sidebar text-center sticky top-0 z-20 border-r border-white/10">
                                         C2
                                     </TableHead>
-                                    <TableHead className="font-semibold text-xs tracking-wider uppercase text-slate-200 bg-sidebar text-right sticky top-0 z-20 border-r border-white/10">
+                                    <TableHead className="font-semibold text-xs tracking-wider uppercase text-slate-200 bg-sidebar text-center sticky top-0 z-20 border-r border-white/10">
                                         C4
                                     </TableHead>
-                                    <TableHead className="font-semibold text-xs tracking-wider uppercase text-slate-200 bg-sidebar text-right sticky top-0 z-20 border-r border-white/10">
+                                    <TableHead className="font-semibold text-xs tracking-wider uppercase text-slate-200 bg-sidebar text-center sticky top-0 z-20 border-r border-white/10">
                                         C5
                                     </TableHead>
-                                    <TableHead className="font-semibold text-xs tracking-wider uppercase text-slate-200 bg-sidebar text-right sticky top-0 z-20">
+                                    <TableHead className="font-semibold text-xs tracking-wider uppercase text-slate-200 bg-sidebar text-center sticky top-0 z-20">
                                         Total
                                     </TableHead>
                                 </TableRow>
@@ -825,6 +833,13 @@ export default function BankReport() {
                                                 const c4Rec = wmRecords.find(r => r.slot === "C4") || null;
                                                 const c5Rec = wmRecords.find(r => r.slot === "C5") || null;
 
+                                                const totalAllotted = c1Rec?.ea_total_allotted ?? 0;
+                                                const totalWheeling = c1Rec?.act_total_calculated_wheeling_value ?? 0;
+                                                const rawDiff = totalAllotted - totalWheeling;
+                                                const lossVal = rawDiff * (globalBankingLoss / 100);
+                                                const finalVal = rawDiff - lossVal;
+                                                const calculatedHover = `Total Allotted: ${totalAllotted.toLocaleString()} - Total Wheeling Value: ${totalWheeling.toLocaleString()} = ${rawDiff.toLocaleString()} - ${globalBankingLoss}% Banking Loss (${lossVal.toLocaleString()}) = ${finalVal.toLocaleString()}`;
+
                                                 const rowDefs = [
                                                     {
                                                         label: "Opening Banking (EB Statement)",
@@ -855,17 +870,6 @@ export default function BankReport() {
                                                         valC5: c5Rec?.ebStatementBankingUtilized ?? 0,
                                                     },
                                                     {
-                                                        label: "Banking Utilized (Our Own Calculation)",
-                                                        valC1: c1Rec?.ownCalculatedBankingUtilized ?? 0,
-                                                        valC2: c2Rec?.ownCalculatedBankingUtilized ?? 0,
-                                                        valC4: c4Rec?.ownCalculatedBankingUtilized ?? 0,
-                                                        valC5: c5Rec?.ownCalculatedBankingUtilized ?? 0,
-                                                        hoverC1: c1Rec?.hoverFormulaText ?? "",
-                                                        hoverC2: c2Rec?.hoverFormulaText ?? "",
-                                                        hoverC4: c4Rec?.hoverFormulaText ?? "",
-                                                        hoverC5: c5Rec?.hoverFormulaText ?? "",
-                                                    },
-                                                    {
                                                         label: "Balance Banking (Allotment Order)",
                                                         valC1: c1Rec?.ebBanking ?? 0,
                                                         valC2: c2Rec?.ebBanking ?? 0,
@@ -874,18 +878,59 @@ export default function BankReport() {
                                                     },
                                                     {
                                                         label: "Balance Banking (Our Own Calculation)",
-                                                        valC1: c1Rec?.ownCalculatedEbBanking ?? 0,
-                                                        valC2: c2Rec?.ownCalculatedEbBanking ?? 0,
-                                                        valC4: c4Rec?.ownCalculatedEbBanking ?? 0,
-                                                        valC5: c5Rec?.ownCalculatedEbBanking ?? 0,
-                                                        hoverC1: c1Rec?.balanceHoverText ?? "",
-                                                        hoverC2: c2Rec?.balanceHoverText ?? "",
-                                                        hoverC4: c4Rec?.balanceHoverText ?? "",
-                                                        hoverC5: c5Rec?.balanceHoverText ?? "",
+                                                        isMerged: true,
+                                                        valTotal: finalVal,
+                                                        hoverText: calculatedHover
                                                     },
                                                 ] as any[];
 
                                                 return rowDefs.map((row, rIdx) => {
+                                                    if (row.isMerged) {
+                                                        return (
+                                                            <TableRow
+                                                                key={`${wmNumber}-${rIdx}`}
+                                                                className="hover:bg-slate-50/80 border-b border-slate-400 last:border-b-0 transition-colors"
+                                                            >
+                                                                {rIdx === 0 && (
+                                                                    <TableCell
+                                                                        rowSpan={6}
+                                                                        className="py-2.5 px-4 font-semibold text-slate-800 border-b border-slate-400 border-r border-slate-400 align-middle bg-white/95 sticky left-0 z-10 shadow-[inset_-1px_0_rgba(148,163,184,1)]"
+                                                                    >
+                                                                        <div className="flex items-center gap-1.5 justify-start">
+                                                                            <Wind className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                                                                            <span className="tracking-tight">{wmNumber}</span>
+                                                                        </div>
+                                                                    </TableCell>
+                                                                )}
+                                                                <TableCell className="py-2 px-4 text-left border-b border-slate-400 border-r border-slate-400 align-middle text-slate-700 font-medium">
+                                                                    {row.label}
+                                                                </TableCell>
+                                                                {row.hoverText ? (
+                                                                    <Tooltip>
+                                                                        <TooltipTrigger asChild>
+                                                                            <TableCell
+                                                                                colSpan={5}
+                                                                                className={`py-2 px-4 text-right border-b border-slate-400 font-semibold cursor-help ${row.valTotal < 0 ? "text-red-600" : "text-black"}`}
+                                                                            >
+                                                                                {row.valTotal.toLocaleString()}
+                                                                            </TableCell>
+                                                                        </TooltipTrigger>
+                                                                        <TooltipContent className="bg-white text-black border border-slate-300 text-base font-semibold px-4 py-2.5 shadow-lg max-w-md">
+                                                                            {row.hoverText}
+                                                                        </TooltipContent>
+                                                                    </Tooltip>
+                                                                ) : (
+                                                                    <TableCell
+                                                                        colSpan={5}
+                                                                        className={`py-2 px-4 text-right border-b border-slate-400 font-semibold ${row.valTotal < 0 ? "text-red-600" : "text-black"}`}
+                                                                    >
+                                                                        {row.valTotal.toLocaleString()}
+                                                                    </TableCell>
+                                                                )}
+                                                            </TableRow>
+                                                        );
+                                                    }
+
                                                     const totalVal = row.valC1 + row.valC2 + row.valC4 + row.valC5;
 
                                                     return (
@@ -895,7 +940,7 @@ export default function BankReport() {
                                                         >
                                                             {rIdx === 0 && (
                                                                 <TableCell
-                                                                    rowSpan={7}
+                                                                    rowSpan={6}
                                                                     className="py-2.5 px-4 font-semibold text-slate-800 border-b border-slate-400 border-r border-slate-400 align-middle bg-white/95 sticky left-0 z-10 shadow-[inset_-1px_0_rgba(148,163,184,1)]"
                                                                 >
                                                                     <div className="flex items-center gap-1.5 justify-start">
@@ -907,25 +952,25 @@ export default function BankReport() {
                                                             <TableCell className="py-2 px-4 text-left border-b border-slate-400 border-r border-slate-400 align-middle text-slate-700 font-medium">
                                                                 {row.label}
                                                             </TableCell>
-                                                            <TableCell 
+                                                            <TableCell
                                                                 className={`py-2 px-4 text-right border-b border-slate-400 border-r border-slate-400 ${row.valC1 < 0 ? "text-red-600" : "text-black"}`}
                                                                 title={row.hoverC1 || undefined}
                                                             >
                                                                 {row.valC1.toLocaleString()}
                                                             </TableCell>
-                                                            <TableCell 
+                                                            <TableCell
                                                                 className={`py-2 px-4 text-right border-b border-slate-400 border-r border-slate-400 ${row.valC2 < 0 ? "text-red-600" : "text-black"}`}
                                                                 title={row.hoverC2 || undefined}
                                                             >
                                                                 {row.valC2.toLocaleString()}
                                                             </TableCell>
-                                                            <TableCell 
+                                                            <TableCell
                                                                 className={`py-2 px-4 text-right border-b border-slate-400 border-r border-slate-400 ${row.valC4 < 0 ? "text-red-600" : "text-black"}`}
                                                                 title={row.hoverC4 || undefined}
                                                             >
                                                                 {row.valC4.toLocaleString()}
                                                             </TableCell>
-                                                            <TableCell 
+                                                            <TableCell
                                                                 className={`py-2 px-4 text-right border-b border-slate-400 border-r border-slate-400 ${row.valC5 < 0 ? "text-red-600" : "text-black"}`}
                                                                 title={row.hoverC5 || undefined}
                                                             >
