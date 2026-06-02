@@ -910,7 +910,8 @@ export default function BankReport() {
                                                                         <TooltipTrigger asChild>
                                                                             <TableCell
                                                                                 colSpan={5}
-                                                                                className={`py-2 px-4 text-right border-b border-slate-400 font-semibold cursor-help ${row.valTotal < 0 ? "text-red-600" : "text-black"}`}
+                                                                                className="py-2 px-4 text-center border-b border-slate-400 font-semibold cursor-help"
+                                                                                style={{ color: '#B22222' }}
                                                                             >
                                                                                 {row.valTotal.toLocaleString()}
                                                                             </TableCell>
@@ -922,7 +923,8 @@ export default function BankReport() {
                                                                 ) : (
                                                                     <TableCell
                                                                         colSpan={5}
-                                                                        className={`py-2 px-4 text-right border-b border-slate-400 font-semibold ${row.valTotal < 0 ? "text-red-600" : "text-black"}`}
+                                                                        className="py-2 px-4 text-center border-b border-slate-400 font-semibold"
+                                                                        style={{ color: '#B22222' }}
                                                                     >
                                                                         {row.valTotal.toLocaleString()}
                                                                     </TableCell>
