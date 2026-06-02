@@ -32,6 +32,11 @@ interface WindmillRecord {
     transmissionLoss: number;
     bankingLoss: number;
     ebBanking: number;
+    ebStatementBankingUtilized: number;
+    ownCalculatedBankingUtilized: number;
+    ownCalculatedEbBanking: number;
+    ownOpeningBanking: number;
+    hoverFormulaText: string;
 }
 
 interface MonthlyData {
@@ -156,6 +161,10 @@ export default function BankReport() {
                         ao_bal_c2: number;
                         ao_bal_c4: number;
                         ao_bal_c5: number;
+                        ea_bank_c1: number;
+                        ea_bank_c2: number;
+                        ea_bank_c4: number;
+                        ea_bank_c5: number;
                     }> = {};
                     response.data.forEach((item: any) => {
                         const key = `${item.year}-${item.month}-${String(item.windmill_number || "").trim()}`;
@@ -185,6 +194,10 @@ export default function BankReport() {
                             ao_bal_c2: Number(item.ao_bal_c2 || 0),
                             ao_bal_c4: Number(item.ao_bal_c4 || 0),
                             ao_bal_c5: Number(item.ao_bal_c5 || 0),
+                            ea_bank_c1: Number(item.ea_bank_c1 || 0),
+                            ea_bank_c2: Number(item.ea_bank_c2 || 0),
+                            ea_bank_c4: Number(item.ea_bank_c4 || 0),
+                            ea_bank_c5: Number(item.ea_bank_c5 || 0),
                         };
                     });
                     setUtilizedData(dataMap);
@@ -250,6 +263,7 @@ export default function BankReport() {
     // Running balance per windmill and slot for the current financial/calendar year.
     // Key: `${windmillNumber}-${slot}` -> balance
     const runningBalances: Record<string, number> = {};
+    const runningOwnBalances: Record<string, number> = {};
 
     const monthlyDataList: MonthlyData[] = monthsList.map((monthName, idx) => {
         const calendarMonths = [
@@ -295,6 +309,10 @@ export default function BankReport() {
                 ao_bal_c2: 0,
                 ao_bal_c4: 0,
                 ao_bal_c5: 0,
+                ea_bank_c1: 0,
+                ea_bank_c2: 0,
+                ea_bank_c4: 0,
+                ea_bank_c5: 0,
             };
 
             // Fetch dynamic values for NEXT month to get its banking_units as current month's EB Banking
@@ -314,10 +332,10 @@ export default function BankReport() {
 
             // Define slot values for calculations
             const slotValues = {
-                C1: { pp: dbUtilized.pp_c1, ut: dbUtilized.c1, eb: dbUtilizedNext.eb_c1, aoPP: dbUtilized.ao_pp_c1, aoBank: dbUtilized.ao_bank_c1, aoBal: dbUtilized.ao_bal_c1 },
-                C2: { pp: dbUtilized.pp_c2, ut: dbUtilized.c2, eb: dbUtilizedNext.eb_c2, aoPP: dbUtilized.ao_pp_c2, aoBank: dbUtilized.ao_bank_c2, aoBal: dbUtilized.ao_bal_c2 },
-                C4: { pp: dbUtilized.pp_c4, ut: dbUtilized.c4, eb: dbUtilizedNext.eb_c4, aoPP: dbUtilized.ao_pp_c4, aoBank: dbUtilized.ao_bank_c4, aoBal: dbUtilized.ao_bal_c4 },
-                C5: { pp: dbUtilized.pp_c5, ut: dbUtilized.c5, eb: dbUtilizedNext.eb_c5, aoPP: dbUtilized.ao_pp_c5, aoBank: dbUtilized.ao_bank_c5, aoBal: dbUtilized.ao_bal_c5 }
+                C1: { pp: dbUtilized.pp_c1, ut: dbUtilized.c1, eb: dbUtilizedNext.eb_c1, aoPP: dbUtilized.ao_pp_c1, aoBank: dbUtilized.ao_bank_c1, aoBal: dbUtilized.ao_bal_c1, eaBank: dbUtilized.ea_bank_c1 },
+                C2: { pp: dbUtilized.pp_c2, ut: dbUtilized.c2, eb: dbUtilizedNext.eb_c2, aoPP: dbUtilized.ao_pp_c2, aoBank: dbUtilized.ao_bank_c2, aoBal: dbUtilized.ao_bal_c2, eaBank: dbUtilized.ea_bank_c2 },
+                C4: { pp: dbUtilized.pp_c4, ut: dbUtilized.c4, eb: dbUtilizedNext.eb_c4, aoPP: dbUtilized.ao_pp_c4, aoBank: dbUtilized.ao_bank_c4, aoBal: dbUtilized.ao_bal_c4, eaBank: dbUtilized.ea_bank_c4 },
+                C5: { pp: dbUtilized.pp_c5, ut: dbUtilized.c5, eb: dbUtilizedNext.eb_c5, aoPP: dbUtilized.ao_pp_c5, aoBank: dbUtilized.ao_bank_c5, aoBal: dbUtilized.ao_bal_c5, eaBank: dbUtilized.ea_bank_c5 }
             };
 
             // Fetch opening banking values
@@ -328,15 +346,40 @@ export default function BankReport() {
                 C5: monthName === "April" ? 0 : (runningBalances[`${wmNumber}-C5`] || 0)
             };
 
+            const openingOwnBanking = {
+                C1: monthName === "April" ? 0 : (runningOwnBalances[`${wmNumber}-C1`] || 0),
+                C2: monthName === "April" ? 0 : (runningOwnBalances[`${wmNumber}-C2`] || 0),
+                C4: monthName === "April" ? 0 : (runningOwnBalances[`${wmNumber}-C4`] || 0),
+                C5: monthName === "April" ? 0 : (runningOwnBalances[`${wmNumber}-C5`] || 0)
+            };
+
             const slots = ["C1", "C2", "C4", "C5"] as const;
 
             return slots.map((slot) => {
                 const balanceKey = `${wmNumber}-${slot}`;
                 const val = slotValues[slot];
                 const slotBanking = openingBanking[slot];
+                const slotOwnBanking = openingOwnBanking[slot];
 
                 // Update running balance for next month's banking (using EB Banking units)
                 runningBalances[balanceKey] = val.eb;
+
+                // Our Own Calculation:
+                const rawBankingUtilized = val.eaBank;
+                
+                const tlPct = windmillLossesMap[wmNumber] || 0;
+                const blPct = globalBankingLoss || 0;
+                const tlVal = rawBankingUtilized * (tlPct / 100);
+                const blVal = rawBankingUtilized * (blPct / 100);
+                
+                const ownCalculatedBankingUtilized = rawBankingUtilized - tlVal - blVal;
+                const hoverFormulaText = `${rawBankingUtilized.toFixed(2)} - ${tlPct}% TL - ${blPct}% BL = ${ownCalculatedBankingUtilized.toFixed(2)}`;
+
+                const ownCalculatedEbBanking = slotBanking - ownCalculatedBankingUtilized;
+                const balanceHoverText = `${slotBanking.toFixed(2)} (Opening Banking) - ${ownCalculatedBankingUtilized.toFixed(2)} (Banking Utilized) = ${ownCalculatedEbBanking.toFixed(2)} (Balance)`;
+
+                // Update running balance for next month's own calculation
+                runningOwnBalances[balanceKey] = ownCalculatedEbBanking;
 
                 return {
                     windmillNumber: wmNumber,
@@ -344,11 +387,17 @@ export default function BankReport() {
                     banking: slotBanking,
                     powerplant: val.pp,
                     aoPowerplantUtilized: val.aoPP,
-                    aoBankingUtilized: val.aoBank,
+                    aoBankingUtilized: val.ut,
                     aoBalanceBanking: val.aoBal,
                     transmissionLoss: windmillLossesMap[wmNumber] || 0,
                     bankingLoss: globalBankingLoss,
                     ebBanking: val.eb,
+                    ebStatementBankingUtilized: val.aoBank,
+                    ownCalculatedBankingUtilized,
+                    ownCalculatedEbBanking,
+                    ownOpeningBanking: slotOwnBanking,
+                    hoverFormulaText,
+                    balanceHoverText,
                 };
             });
         });
@@ -390,17 +439,78 @@ export default function BankReport() {
         // Prepare data for export
         const exportData: any[] = [];
         filteredDataList.forEach((group) => {
-            group.records.forEach((row) => {
-                exportData.push({
-                    "Month": group.displayMonth,
-                    "Windmill Number": row.windmillNumber,
-                    "Slot": row.slot,
-                    "Opening Banking": row.banking,
-                    "Powerplant": row.powerplant,
-                    "Powerplant Utilized": row.aoPowerplantUtilized,
-                    "Banking Utilized": row.aoBankingUtilized,
-                    "Balance Banking": row.aoBalanceBanking,
-                    "EB Banking": row.ebBanking
+            const windmillsInGroup = Array.from(new Set(group.records.map(r => r.windmillNumber)));
+            windmillsInGroup.forEach((wmNumber) => {
+                const wmRecords = group.records.filter(r => r.windmillNumber === wmNumber);
+                const c1Rec = wmRecords.find(r => r.slot === "C1") || null;
+                const c2Rec = wmRecords.find(r => r.slot === "C2") || null;
+                const c4Rec = wmRecords.find(r => r.slot === "C4") || null;
+                const c5Rec = wmRecords.find(r => r.slot === "C5") || null;
+
+                const rowDefs = [
+                    {
+                        label: "Opening Banking (EB Statement)",
+                        valC1: c1Rec?.banking ?? 0,
+                        valC2: c2Rec?.banking ?? 0,
+                        valC4: c4Rec?.banking ?? 0,
+                        valC5: c5Rec?.banking ?? 0,
+                    },
+                    {
+                        label: "Powerplant (EB Statement)",
+                        valC1: c1Rec?.powerplant ?? 0,
+                        valC2: c2Rec?.powerplant ?? 0,
+                        valC4: c4Rec?.powerplant ?? 0,
+                        valC5: c5Rec?.powerplant ?? 0,
+                    },
+                    {
+                        label: "Powerplant Utilized (Allotment Order)",
+                        valC1: c1Rec?.aoPowerplantUtilized ?? 0,
+                        valC2: c2Rec?.aoPowerplantUtilized ?? 0,
+                        valC4: c4Rec?.aoPowerplantUtilized ?? 0,
+                        valC5: c5Rec?.aoPowerplantUtilized ?? 0,
+                    },
+                    {
+                        label: "Banking Utilized (Allotment Order)",
+                        valC1: c1Rec?.ebStatementBankingUtilized ?? 0,
+                        valC2: c2Rec?.ebStatementBankingUtilized ?? 0,
+                        valC4: c4Rec?.ebStatementBankingUtilized ?? 0,
+                        valC5: c5Rec?.ebStatementBankingUtilized ?? 0,
+                    },
+                    {
+                        label: "Banking Utilized (Our Own Calculation)",
+                        valC1: c1Rec?.ownCalculatedBankingUtilized ?? 0,
+                        valC2: c2Rec?.ownCalculatedBankingUtilized ?? 0,
+                        valC4: c4Rec?.ownCalculatedBankingUtilized ?? 0,
+                        valC5: c5Rec?.ownCalculatedBankingUtilized ?? 0,
+                    },
+                    {
+                        label: "Balance Banking (Allotment Order)",
+                        valC1: c1Rec?.ebBanking ?? 0,
+                        valC2: c2Rec?.ebBanking ?? 0,
+                        valC4: c4Rec?.ebBanking ?? 0,
+                        valC5: c5Rec?.ebBanking ?? 0,
+                    },
+                    {
+                        label: "Balance Banking (Our Own Calculation)",
+                        valC1: c1Rec?.ownCalculatedEbBanking ?? 0,
+                        valC2: c2Rec?.ownCalculatedEbBanking ?? 0,
+                        valC4: c4Rec?.ownCalculatedEbBanking ?? 0,
+                        valC5: c5Rec?.ownCalculatedEbBanking ?? 0,
+                    },
+                ];
+
+                rowDefs.forEach((row) => {
+                    const totalVal = row.valC1 + row.valC2 + row.valC4 + row.valC5;
+                    exportData.push({
+                        "Month": group.displayMonth,
+                        "Windmill Number": wmNumber,
+                        "Particulars": row.label,
+                        "C1": row.valC1,
+                        "C2": row.valC2,
+                        "C4": row.valC4,
+                        "C5": row.valC5,
+                        "Total": totalVal,
+                    });
                 });
             });
         });
@@ -638,31 +748,25 @@ export default function BankReport() {
                             <TableHeader className="sticky top-0 bg-sidebar z-20 shadow-[inset_0_-1px_0_rgba(255,255,255,0.15)]">
                                 <TableRow className="hover:bg-transparent">
                                     <TableHead className="font-semibold text-xs tracking-wider uppercase text-slate-200 bg-sidebar w-[200px] text-left sticky left-0 top-0 z-30 shadow-[inset_-1px_0_rgba(255,255,255,0.15)] border-r border-white/10">
-                                        Month
+                                        Month / Windmill
                                     </TableHead>
                                     <TableHead className="font-semibold text-xs tracking-wider uppercase text-slate-200 bg-sidebar text-left sticky top-0 z-20 border-r border-white/10">
-                                        Windmill Number
-                                    </TableHead>
-                                    <TableHead className="font-semibold text-xs tracking-wider uppercase text-slate-200 bg-sidebar text-left sticky top-0 z-20 border-r border-white/10">
-                                        Slots
+                                        Particulars
                                     </TableHead>
                                     <TableHead className="font-semibold text-xs tracking-wider uppercase text-slate-200 bg-sidebar text-right sticky top-0 z-20 border-r border-white/10">
-                                        Opening Banking
+                                        C1
                                     </TableHead>
                                     <TableHead className="font-semibold text-xs tracking-wider uppercase text-slate-200 bg-sidebar text-right sticky top-0 z-20 border-r border-white/10">
-                                        Powerplant
+                                        C2
                                     </TableHead>
                                     <TableHead className="font-semibold text-xs tracking-wider uppercase text-slate-200 bg-sidebar text-right sticky top-0 z-20 border-r border-white/10">
-                                        Powerplant Utilized
+                                        C4
                                     </TableHead>
                                     <TableHead className="font-semibold text-xs tracking-wider uppercase text-slate-200 bg-sidebar text-right sticky top-0 z-20 border-r border-white/10">
-                                        Banking Utilized
-                                    </TableHead>
-                                    <TableHead className="font-semibold text-xs tracking-wider uppercase text-slate-200 bg-sidebar text-right sticky top-0 z-20 border-r border-white/10">
-                                        Balance Banking
+                                        C5
                                     </TableHead>
                                     <TableHead className="font-semibold text-xs tracking-wider uppercase text-slate-200 bg-sidebar text-right sticky top-0 z-20">
-                                        EB Banking
+                                        Total
                                     </TableHead>
                                 </TableRow>
                             </TableHeader>
@@ -670,115 +774,176 @@ export default function BankReport() {
                                 {filteredDataList.map((group) => {
                                     const isExpanded = expandedMonths[group.monthName];
 
-                                    // Calculate totals for the group row
-                                    const totalBanking = group.records.reduce((sum, r) => sum + r.banking, 0);
-                                    const totalPowerplant = group.records.reduce((sum, r) => sum + r.powerplant, 0);
-                                    const totalAoPowerplantUtilized = group.records.reduce((sum, r) => sum + r.aoPowerplantUtilized, 0);
-                                    const totalAoBankingUtilized = group.records.reduce((sum, r) => sum + r.aoBankingUtilized, 0);
-                                    const totalAoBalanceBanking = group.records.reduce((sum, r) => sum + r.aoBalanceBanking, 0);
-                                    const totalEbBanking = group.records.reduce((sum, r) => sum + r.ebBanking, 0);
+                                    // Calculate monthly totals for the collapsible header row
+                                    const groupEbC1 = group.records.reduce((sum, r) => sum + (r.slot === "C1" ? r.ebBanking : 0), 0);
+                                    const groupEbC2 = group.records.reduce((sum, r) => sum + (r.slot === "C2" ? r.ebBanking : 0), 0);
+                                    const groupEbC4 = group.records.reduce((sum, r) => sum + (r.slot === "C4" ? r.ebBanking : 0), 0);
+                                    const groupEbC5 = group.records.reduce((sum, r) => sum + (r.slot === "C5" ? r.ebBanking : 0), 0);
+                                    const groupEbTotal = groupEbC1 + groupEbC2 + groupEbC4 + groupEbC5;
+
                                     const uniqueWindmillsCount = new Set(group.records.map(r => r.windmillNumber)).size;
+                                    const windmillsInGroup = Array.from(new Set(group.records.map(r => r.windmillNumber)));
 
                                     return (
                                         <React.Fragment key={group.monthName}>
                                             {/* Month Summary Header Row (Collapsible Toggle) */}
                                             <TableRow
                                                 onClick={() => toggleMonth(group.monthName)}
-                                                className="bg-slate-100/70 hover:bg-slate-100 border-b border-slate-200 cursor-pointer font-semibold transition-colors duration-150"
+                                                className="bg-slate-100/70 hover:bg-slate-100 border-b border-slate-400 cursor-pointer font-semibold transition-colors duration-150"
                                             >
-                                                <TableCell className="py-3 px-4 sticky left-0 bg-slate-100 z-10 shadow-[inset_-1px_0_rgba(226,232,240,1)] border-b border-slate-200 border-r border-slate-200">
+                                                <TableCell className="py-3 px-4 sticky left-0 bg-slate-100 z-10 shadow-[inset_-1px_0_rgba(148,163,184,1)] border-b border-slate-400 border-r border-slate-400">
                                                     <div className="flex items-center gap-2">
                                                         <ChevronDown className={`h-4 w-4 text-slate-500 transition-transform duration-200 shrink-0 ${isExpanded ? "" : "-rotate-90"}`} />
                                                         <span className="text-slate-800">{group.displayMonth}</span>
                                                     </div>
                                                 </TableCell>
-                                                <TableCell colSpan={2} className="py-3 px-4 text-slate-500 italic border-b border-slate-200 border-r border-slate-200">
-                                                    Total ({uniqueWindmillsCount} Windmills)
+                                                <TableCell className="py-3 px-4 text-slate-500 italic border-b border-slate-400 border-r border-slate-400">
+                                                    Total EB Banking (EB Statement) ({uniqueWindmillsCount} Windmills)
                                                 </TableCell>
-                                                <TableCell className={`py-3 px-4 text-right font-bold border-b border-slate-200 border-r border-slate-200 ${totalBanking < 0 ? "text-red-600" : "text-black"}`}>
-                                                    {totalBanking.toLocaleString()}
+                                                <TableCell className={`py-3 px-4 text-right font-bold border-b border-slate-400 border-r border-slate-400 ${groupEbC1 < 0 ? "text-red-600" : "text-black"}`}>
+                                                    {groupEbC1.toLocaleString()}
                                                 </TableCell>
-                                                <TableCell className={`py-3 px-4 text-right font-bold border-b border-slate-200 border-r border-slate-200 ${totalPowerplant < 0 ? "text-red-600" : "text-black"}`}>
-                                                    {totalPowerplant.toLocaleString()}
+                                                <TableCell className={`py-3 px-4 text-right font-bold border-b border-slate-400 border-r border-slate-400 ${groupEbC2 < 0 ? "text-red-600" : "text-black"}`}>
+                                                    {groupEbC2.toLocaleString()}
                                                 </TableCell>
-                                                <TableCell className={`py-3 px-4 text-right font-bold border-b border-slate-200 border-r border-slate-200 ${totalAoPowerplantUtilized < 0 ? "text-red-600" : "text-black"}`}>
-                                                    {totalAoPowerplantUtilized.toLocaleString()}
+                                                <TableCell className={`py-3 px-4 text-right font-bold border-b border-slate-400 border-r border-slate-400 ${groupEbC4 < 0 ? "text-red-600" : "text-black"}`}>
+                                                    {groupEbC4.toLocaleString()}
                                                 </TableCell>
-                                                <TableCell className={`py-3 px-4 text-right font-bold border-b border-slate-200 border-r border-slate-200 ${totalAoBankingUtilized < 0 ? "text-red-600" : "text-black"}`}>
-                                                    {totalAoBankingUtilized.toLocaleString()}
+                                                <TableCell className={`py-3 px-4 text-right font-bold border-b border-slate-400 border-r border-slate-400 ${groupEbC5 < 0 ? "text-red-600" : "text-black"}`}>
+                                                    {groupEbC5.toLocaleString()}
                                                 </TableCell>
-                                                <TableCell className={`py-3 px-4 text-right font-bold border-b border-slate-200 border-r border-slate-200 ${totalAoBalanceBanking < 0 ? "text-red-600" : "text-black"}`}>
-                                                    {totalAoBalanceBanking.toLocaleString()}
-                                                </TableCell>
-                                                <TableCell className={`py-3 px-4 text-right font-bold border-b border-slate-200 ${totalEbBanking < 0 ? "text-red-600" : "text-black"}`}>
-                                                    {totalEbBanking.toLocaleString()}
+                                                <TableCell className={`py-3 px-4 text-right font-bold border-b border-slate-400 ${groupEbTotal < 0 ? "text-red-600" : "text-black"}`}>
+                                                    {groupEbTotal.toLocaleString()}
                                                 </TableCell>
                                             </TableRow>
 
                                             {/* Windmill Detail Rows (Visible only when expanded) */}
-                                            {isExpanded && (
-                                                <>
-                                                    {group.records.map((row, index) => {
-                                                        const firstIdx = group.records.findIndex(r => r.windmillNumber === row.windmillNumber);
-                                                        const count = group.records.filter(r => r.windmillNumber === row.windmillNumber).length;
-                                                        const isFirst = index === firstIdx;
+                                            {isExpanded && windmillsInGroup.flatMap((wmNumber) => {
+                                                const wmRecords = group.records.filter(r => r.windmillNumber === wmNumber);
+                                                const c1Rec = wmRecords.find(r => r.slot === "C1") || null;
+                                                const c2Rec = wmRecords.find(r => r.slot === "C2") || null;
+                                                const c4Rec = wmRecords.find(r => r.slot === "C4") || null;
+                                                const c5Rec = wmRecords.find(r => r.slot === "C5") || null;
 
-                                                        return (
-                                                            <TableRow
-                                                                key={index}
-                                                                className="hover:bg-slate-50/80 border-b border-slate-100 last:border-b-0 transition-colors"
+                                                const rowDefs = [
+                                                    {
+                                                        label: "Opening Banking (EB Statement)",
+                                                        valC1: c1Rec?.banking ?? 0,
+                                                        valC2: c2Rec?.banking ?? 0,
+                                                        valC4: c4Rec?.banking ?? 0,
+                                                        valC5: c5Rec?.banking ?? 0,
+                                                    },
+                                                    {
+                                                        label: "Powerplant (EB Statement)",
+                                                        valC1: c1Rec?.powerplant ?? 0,
+                                                        valC2: c2Rec?.powerplant ?? 0,
+                                                        valC4: c4Rec?.powerplant ?? 0,
+                                                        valC5: c5Rec?.powerplant ?? 0,
+                                                    },
+                                                    {
+                                                        label: "Powerplant Utilized (Allotment Order)",
+                                                        valC1: c1Rec?.aoPowerplantUtilized ?? 0,
+                                                        valC2: c2Rec?.aoPowerplantUtilized ?? 0,
+                                                        valC4: c4Rec?.aoPowerplantUtilized ?? 0,
+                                                        valC5: c5Rec?.aoPowerplantUtilized ?? 0,
+                                                    },
+                                                    {
+                                                        label: "Banking Utilized (Allotment Order)",
+                                                        valC1: c1Rec?.ebStatementBankingUtilized ?? 0,
+                                                        valC2: c2Rec?.ebStatementBankingUtilized ?? 0,
+                                                        valC4: c4Rec?.ebStatementBankingUtilized ?? 0,
+                                                        valC5: c5Rec?.ebStatementBankingUtilized ?? 0,
+                                                    },
+                                                    {
+                                                        label: "Banking Utilized (Our Own Calculation)",
+                                                        valC1: c1Rec?.ownCalculatedBankingUtilized ?? 0,
+                                                        valC2: c2Rec?.ownCalculatedBankingUtilized ?? 0,
+                                                        valC4: c4Rec?.ownCalculatedBankingUtilized ?? 0,
+                                                        valC5: c5Rec?.ownCalculatedBankingUtilized ?? 0,
+                                                        hoverC1: c1Rec?.hoverFormulaText ?? "",
+                                                        hoverC2: c2Rec?.hoverFormulaText ?? "",
+                                                        hoverC4: c4Rec?.hoverFormulaText ?? "",
+                                                        hoverC5: c5Rec?.hoverFormulaText ?? "",
+                                                    },
+                                                    {
+                                                        label: "Balance Banking (Allotment Order)",
+                                                        valC1: c1Rec?.ebBanking ?? 0,
+                                                        valC2: c2Rec?.ebBanking ?? 0,
+                                                        valC4: c4Rec?.ebBanking ?? 0,
+                                                        valC5: c5Rec?.ebBanking ?? 0,
+                                                    },
+                                                    {
+                                                        label: "Balance Banking (Our Own Calculation)",
+                                                        valC1: c1Rec?.ownCalculatedEbBanking ?? 0,
+                                                        valC2: c2Rec?.ownCalculatedEbBanking ?? 0,
+                                                        valC4: c4Rec?.ownCalculatedEbBanking ?? 0,
+                                                        valC5: c5Rec?.ownCalculatedEbBanking ?? 0,
+                                                        hoverC1: c1Rec?.balanceHoverText ?? "",
+                                                        hoverC2: c2Rec?.balanceHoverText ?? "",
+                                                        hoverC4: c4Rec?.balanceHoverText ?? "",
+                                                        hoverC5: c5Rec?.balanceHoverText ?? "",
+                                                    },
+                                                ] as any[];
+
+                                                return rowDefs.map((row, rIdx) => {
+                                                    const totalVal = row.valC1 + row.valC2 + row.valC4 + row.valC5;
+
+                                                    return (
+                                                        <TableRow
+                                                            key={`${wmNumber}-${rIdx}`}
+                                                            className="hover:bg-slate-50/80 border-b border-slate-400 last:border-b-0 transition-colors"
+                                                        >
+                                                            {rIdx === 0 && (
+                                                                <TableCell
+                                                                    rowSpan={7}
+                                                                    className="py-2.5 px-4 font-semibold text-slate-800 border-b border-slate-400 border-r border-slate-400 align-middle bg-white/95 sticky left-0 z-10 shadow-[inset_-1px_0_rgba(148,163,184,1)]"
+                                                                >
+                                                                    <div className="flex items-center gap-1.5 justify-start">
+                                                                        <Wind className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                                                                        <span className="tracking-tight">{wmNumber}</span>
+                                                                    </div>
+                                                                </TableCell>
+                                                            )}
+                                                            <TableCell className="py-2 px-4 text-left border-b border-slate-400 border-r border-slate-400 align-middle text-slate-700 font-medium">
+                                                                {row.label}
+                                                            </TableCell>
+                                                            <TableCell 
+                                                                className={`py-2 px-4 text-right border-b border-slate-400 border-r border-slate-400 ${row.valC1 < 0 ? "text-red-600" : "text-black"}`}
+                                                                title={row.hoverC1 || undefined}
                                                             >
-                                                                {index === 0 && (
-                                                                    <TableCell
-                                                                        rowSpan={group.records.length}
-                                                                        className="sticky left-0 bg-white z-10 shadow-[inset_-1px_0_rgba(226,232,240,1)] border-b border-slate-200 border-r border-slate-200"
-                                                                    >
-                                                                        {/* Visual grouping spacing */}
-                                                                    </TableCell>
-                                                                )}
-                                                                {isFirst && (
-                                                                    <TableCell
-                                                                        rowSpan={count}
-                                                                        className="py-2.5 px-4 font-semibold text-slate-800 border-b border-slate-200 border-r border-slate-200 align-middle bg-white/95"
-                                                                    >
-                                                                        <div className="flex items-center gap-1.5 justify-start">
-                                                                            <Wind className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                                                                            <span className="tracking-tight">{row.windmillNumber}</span>
-                                                                        </div>
-                                                                    </TableCell>
-                                                                )}
-                                                                <TableCell className="py-2 px-4 text-left border-b border-slate-200 border-r border-slate-200 align-middle text-slate-700 font-semibold">
-                                                                    {row.slot}
-                                                                </TableCell>
-                                                                <TableCell className={`py-2.5 px-4 text-right border-b border-slate-200 border-r border-slate-200 ${row.banking < 0 ? "text-red-600" : "text-black"}`}>
-                                                                    {row.banking.toLocaleString()}
-                                                                </TableCell>
-                                                                <TableCell className={`py-2.5 px-4 text-right border-b border-slate-200 border-r border-slate-200 ${row.powerplant < 0 ? "text-red-600" : "text-black"}`}>
-                                                                    {row.powerplant.toLocaleString()}
-                                                                </TableCell>
-                                                                <TableCell className={`py-2.5 px-4 text-right border-b border-slate-200 border-r border-slate-200 ${row.aoPowerplantUtilized < 0 ? "text-red-600" : "text-black"}`}>
-                                                                    {row.aoPowerplantUtilized.toLocaleString()}
-                                                                </TableCell>
-                                                                <TableCell className={`py-2.5 px-4 text-right border-b border-slate-200 border-r border-slate-200 ${row.aoBankingUtilized < 0 ? "text-red-600" : "text-black"}`}>
-                                                                    {row.aoBankingUtilized.toLocaleString()}
-                                                                </TableCell>
-                                                                <TableCell className={`py-2.5 px-4 text-right border-b border-slate-200 border-r border-slate-200 ${row.aoBalanceBanking < 0 ? "text-red-600" : "text-black"}`}>
-                                                                    {row.aoBalanceBanking.toLocaleString()}
-                                                                </TableCell>
-                                                                <TableCell className={`py-2.5 px-4 text-right border-b border-slate-200 ${row.ebBanking < 0 ? "text-red-600" : "text-black"}`}>
-                                                                    {row.ebBanking.toLocaleString()}
-                                                                </TableCell>
-                                                            </TableRow>
-                                                        );
-                                                    })}
-                                                </>
-                                            )}
+                                                                {row.valC1.toLocaleString()}
+                                                            </TableCell>
+                                                            <TableCell 
+                                                                className={`py-2 px-4 text-right border-b border-slate-400 border-r border-slate-400 ${row.valC2 < 0 ? "text-red-600" : "text-black"}`}
+                                                                title={row.hoverC2 || undefined}
+                                                            >
+                                                                {row.valC2.toLocaleString()}
+                                                            </TableCell>
+                                                            <TableCell 
+                                                                className={`py-2 px-4 text-right border-b border-slate-400 border-r border-slate-400 ${row.valC4 < 0 ? "text-red-600" : "text-black"}`}
+                                                                title={row.hoverC4 || undefined}
+                                                            >
+                                                                {row.valC4.toLocaleString()}
+                                                            </TableCell>
+                                                            <TableCell 
+                                                                className={`py-2 px-4 text-right border-b border-slate-400 border-r border-slate-400 ${row.valC5 < 0 ? "text-red-600" : "text-black"}`}
+                                                                title={row.hoverC5 || undefined}
+                                                            >
+                                                                {row.valC5.toLocaleString()}
+                                                            </TableCell>
+                                                            <TableCell className={`py-2 px-4 text-right border-b border-slate-400 font-semibold ${totalVal < 0 ? "text-red-600" : "text-black"}`}>
+                                                                {totalVal.toLocaleString()}
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    );
+                                                });
+                                            })}
                                         </React.Fragment>
                                     );
                                 })}
                                 {filteredDataList.every(g => g.records.length === 0) && (
                                     <TableRow>
-                                        <TableCell colSpan={9} className="text-center py-12 text-slate-400 bg-slate-50">
+                                        <TableCell colSpan={7} className="text-center py-12 text-slate-400 bg-slate-50">
                                             <div className="flex flex-col items-center justify-center gap-3">
                                                 <Search className="h-8 w-8 text-slate-300 stroke-[1.5]" />
                                                 <div>
