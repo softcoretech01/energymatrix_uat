@@ -6,7 +6,7 @@ import pymysql
 
 router = APIRouter()
 
-@router.get("/banking/utilized")
+@router.get("/banking/utilized/")
 async def get_banking_utilized(year: int, mode: str = "financial", current_user: dict = Depends(get_current_user)):
     """
     Fetches the total actual allotments (utilized units) and slot-wise units (c1, c2, c4, c5)
