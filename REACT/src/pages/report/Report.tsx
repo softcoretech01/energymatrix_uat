@@ -391,7 +391,13 @@ export default function BankReport() {
                     ea_total_allotted: dbUtilized.ea_total_allotted ?? 0,
                     act_total_calculated_wheeling_value: dbUtilized.act_total_calculated_wheeling_value ?? 0,
                     ownCalculatedBankingUtilized: 0,
-                    ownCalculatedEbBanking: (dbUtilized.ea_total_allotted ?? 0) - (dbUtilized.act_total_calculated_wheeling_value ?? 0),
+                    ownCalculatedEbBanking: (() => {
+                        const allotted = dbUtilized.ea_total_allotted ?? 0;
+                        const origWheeling = dbUtilized.act_total_calculated_wheeling_value ?? 0;
+                        const txLossPct = windmillLossesMap[wmNumber] || 0;
+                        const wheelingWithLoss = origWheeling + (origWheeling * (txLossPct / 100));
+                        return allotted - wheelingWithLoss;
+                    })(),
                     ownOpeningBanking: 0,
                     hoverFormulaText: "",
                     balanceHoverText: "",
@@ -497,7 +503,14 @@ export default function BankReport() {
                         valC4: "",
                         valC5: "",
                         isMerged: true,
-                        valTotal: ((c1Rec?.ea_total_allotted ?? 0) - (c1Rec?.act_total_calculated_wheeling_value ?? 0)) * (1 - (globalBankingLoss / 100))
+                        valTotal: (() => {
+                            const allotted = c1Rec?.ea_total_allotted ?? 0;
+                            const origWheeling = c1Rec?.act_total_calculated_wheeling_value ?? 0;
+                            const txLossPct = c1Rec?.transmissionLoss ?? 0;
+                            const wheelingWithLoss = origWheeling + (origWheeling * (txLossPct / 100));
+                            const diff = allotted - wheelingWithLoss;
+                            return Number((diff * (1 - (globalBankingLoss / 100))).toFixed(3));
+                        })()
                     },
                 ];
 
@@ -834,11 +847,14 @@ export default function BankReport() {
                                                 const c5Rec = wmRecords.find(r => r.slot === "C5") || null;
 
                                                 const totalAllotted = c1Rec?.ea_total_allotted ?? 0;
-                                                const totalWheeling = c1Rec?.act_total_calculated_wheeling_value ?? 0;
-                                                const rawDiff = totalAllotted - totalWheeling;
-                                                const lossVal = rawDiff * (globalBankingLoss / 100);
-                                                const finalVal = rawDiff - lossVal;
-                                                const calculatedHover = `Total Allotted: ${totalAllotted.toLocaleString()} - Total Wheeling Value: ${totalWheeling.toLocaleString()} = ${rawDiff.toLocaleString()} - ${globalBankingLoss}% Banking Loss (${lossVal.toLocaleString()}) = ${finalVal.toLocaleString()}`;
+                                                const originalWheeling = c1Rec?.act_total_calculated_wheeling_value ?? 0;
+                                                const transmissionLossPercent = c1Rec?.transmissionLoss ?? 0;
+                                                const transmissionLossUnits = Number((originalWheeling * (transmissionLossPercent / 100)).toFixed(3));
+                                                const totalWheeling = Number((originalWheeling + transmissionLossUnits).toFixed(3));
+                                                const rawDiff = Number((totalAllotted - totalWheeling).toFixed(3));
+                                                const lossVal = Number((rawDiff * (globalBankingLoss / 100)).toFixed(3));
+                                                const finalVal = Number((rawDiff - lossVal).toFixed(3));
+                                                const calculatedHover = `(Total Allotted: ${totalAllotted.toLocaleString()} - (Total Wheeling Units: ${originalWheeling.toLocaleString()} + Transmission Loss: ${transmissionLossUnits.toLocaleString()} = ${totalWheeling.toLocaleString()})) = ${rawDiff.toLocaleString()} - ${globalBankingLoss}% Banking Loss (${lossVal.toLocaleString()}) = ${finalVal.toLocaleString()}`;
 
                                                 const rowDefs = [
                                                     {

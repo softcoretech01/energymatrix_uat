@@ -152,3 +152,259 @@ async def get_banking_utilized(year: int, mode: str = "financial", current_user:
     finally:
         cursor.close()
         conn.close()
+
+@router.get("/banking/monthly-summary")
+async def get_banking_monthly_summary(year: int, mode: str = "financial", current_user: dict = Depends(get_current_user)):
+    conn = get_connection(db_name="windmill")
+    cursor = conn.cursor(pymysql.cursors.DictCursor)
+    try:
+        # 1. Fetch active windmills
+        cursor.execute("""
+            SELECT id, TRIM(windmill_number) as windmill_number, COALESCE(transmission_loss, 0.0) as transmission_loss 
+            FROM masters.master_windmill 
+            WHERE status = 'Active' AND LOWER(type) = 'windmill'
+        """)
+        windmills = cursor.fetchall()
+        
+        # 2. Fetch EB statement details
+        eb_query = """
+            SELECT 
+                mw.id as windmill_id,
+                es.year,
+                CASE TRIM(es.month)
+                    WHEN 'January' THEN 1 WHEN 'February' THEN 2 WHEN 'March' THEN 3
+                    WHEN 'April' THEN 4 WHEN 'May' THEN 5 WHEN 'June' THEN 6
+                    WHEN 'July' THEN 7 WHEN 'August' THEN 8 WHEN 'September' THEN 9
+                    WHEN 'October' THEN 10 WHEN 'November' THEN 11 WHEN 'December' THEN 12
+                END as month,
+                d.slots as slot,
+                COALESCE(d.banking_units, 0.0) as banking_units,
+                COALESCE(d.net_unit, 0.0) as net_unit
+            FROM windmill.eb_statements es
+            JOIN masters.master_windmill mw ON es.windmill_id = mw.id
+            JOIN windmill.eb_statements_details d ON es.id = d.eb_header_id
+            WHERE (
+                (%(mode)s = 'financial' AND (
+                    (es.year = %(year)s AND CASE TRIM(es.month)
+                        WHEN 'January' THEN 1 WHEN 'February' THEN 2 WHEN 'March' THEN 3
+                        WHEN 'April' THEN 4 WHEN 'May' THEN 5 WHEN 'June' THEN 6
+                        WHEN 'July' THEN 7 WHEN 'August' THEN 8 WHEN 'September' THEN 9
+                        WHEN 'October' THEN 10 WHEN 'November' THEN 11 WHEN 'December' THEN 12
+                    END >= 4)
+                    OR
+                    (es.year = %(year)s + 1 AND CASE TRIM(es.month)
+                        WHEN 'January' THEN 1 WHEN 'February' THEN 2 WHEN 'March' THEN 3
+                        WHEN 'April' THEN 4 WHEN 'May' THEN 5 WHEN 'June' THEN 6
+                        WHEN 'July' THEN 7 WHEN 'August' THEN 8 WHEN 'September' THEN 9
+                        WHEN 'October' THEN 10 WHEN 'November' THEN 11 WHEN 'December' THEN 12
+                    END <= 4)
+                ))
+                OR
+                (%(mode)s = 'calendar' AND (
+                    es.year = %(year)s
+                    OR
+                    (es.year = %(year)s + 1 AND CASE TRIM(es.month)
+                        WHEN 'January' THEN 1 WHEN 'February' THEN 2 WHEN 'March' THEN 3
+                        WHEN 'April' THEN 4 WHEN 'May' THEN 5 WHEN 'June' THEN 6
+                        WHEN 'July' THEN 7 WHEN 'August' THEN 8 WHEN 'September' THEN 9
+                        WHEN 'October' THEN 10 WHEN 'November' THEN 11 WHEN 'December' THEN 12
+                    END = 1)
+                ))
+            ) AND LOWER(mw.type) = 'windmill'
+        """
+        cursor.execute(eb_query, {"year": year, "mode": mode})
+        eb_rows = cursor.fetchall()
+        
+        eb_map = {}
+        for r in eb_rows:
+            slot_str = str(r['slot']).strip().lower()
+            if not slot_str.startswith('c'):
+                slot_str = f"c{slot_str}"
+            key = (r['windmill_id'], r['year'], r['month'], slot_str)
+            eb_map[key] = {
+                'banking_units': float(r['banking_units']),
+                'net_unit': float(r['net_unit'])
+            }
+            
+        # 3. Fetch Allotment Orders
+        ao_query = """
+            SELECT 
+                mw.id as windmill_id,
+                aou.year,
+                CAST(aou.month AS SIGNED) as month,
+                d.slots as slot,
+                COALESCE(d.from_banking, 0.0) as from_banking,
+                COALESCE(d.balance_banking, 0.0) as balance_banking
+            FROM windmill.allotment_order_upload aou
+            JOIN masters.master_windmill mw ON aou.windmill_id = mw.id
+            JOIN windmill.allotment_order_details d ON aou.id = d.allotment_order_id
+            WHERE (
+                (%(mode)s = 'financial' AND ((aou.year = %(year)s AND CAST(aou.month AS SIGNED) >= 4) OR (aou.year = %(year)s + 1 AND CAST(aou.month AS SIGNED) <= 3)))
+                OR
+                (%(mode)s = 'calendar' AND aou.year = %(year)s)
+            ) AND LOWER(mw.type) = 'windmill'
+        """
+        cursor.execute(ao_query, {"year": year, "mode": mode})
+        ao_rows = cursor.fetchall()
+        
+        ao_map = {}
+        for r in ao_rows:
+            slot_str = str(r['slot']).strip().lower()
+            if not slot_str.startswith('c'):
+                slot_str = f"c{slot_str}"
+            key = (r['windmill_id'], r['year'], r['month'], slot_str)
+            ao_map[key] = {
+                'from_banking': float(r['from_banking']),
+                'balance_banking': float(r['balance_banking'])
+            }
+            
+        # 4. Fetch Actual Allotments
+        aa_query = """
+            SELECT 
+                mw.id as windmill_id,
+                aa.year,
+                aa.month,
+                CAST(COALESCE(NULLIF(TRIM(aa.c1), ''), '0') AS DECIMAL(15,2)) as c1,
+                CAST(COALESCE(NULLIF(TRIM(aa.c2), ''), '0') AS DECIMAL(15,2)) as c2,
+                CAST(COALESCE(NULLIF(TRIM(aa.c4), ''), '0') AS DECIMAL(15,2)) as c4,
+                CAST(COALESCE(NULLIF(TRIM(aa.c5), ''), '0') AS DECIMAL(15,2)) as c5
+            FROM windmill.actual_allotment aa
+            JOIN masters.master_windmill mw ON aa.windmill_id = mw.id
+            WHERE (
+                (%(mode)s = 'financial' AND ((aa.year = %(year)s AND aa.month >= 4) OR (aa.year = %(year)s + 1 AND aa.month <= 3)))
+                OR
+                (%(mode)s = 'calendar' AND aa.year = %(year)s)
+            ) AND LOWER(mw.type) = 'windmill'
+        """
+        cursor.execute(aa_query, {"year": year, "mode": mode})
+        aa_rows = cursor.fetchall()
+        
+        aa_map = {}
+        for r in aa_rows:
+            for slot in ['c1', 'c2', 'c4', 'c5']:
+                key = (r['windmill_id'], r['year'], r['month'], slot)
+                aa_map[key] = float(r[slot] or 0.0)
+                
+        # Build monthly list
+        if mode == 'financial':
+            months_list = [
+                (4, year), (5, year), (6, year), (7, year), (8, year), (9, year),
+                (10, year), (11, year), (12, year), (1, year+1), (2, year+1), (3, year+1)
+            ]
+        else:
+            months_list = [(m, year) for m in range(1, 13)]
+            
+        running_balances = {}
+        monthly_data = []
+        
+        for month_num, month_year in months_list:
+            month_name = ["", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"][month_num]
+            
+            m_opening = 0.0
+            m_utilized = 0.0
+            m_added = 0.0
+            m_ending = 0.0
+            
+            windmill_records = []
+            
+            for wm in windmills:
+                wm_id = wm['id']
+                wm_num = wm['windmill_number']
+                
+                w_opening = 0.0
+                w_utilized = 0.0
+                w_added = 0.0
+                w_ending = 0.0
+                
+                slot_records = []
+                
+                for slot in ['c1', 'c2', 'c4', 'c5']:
+                    bal_key = (wm_id, slot)
+                    opening = running_balances.get(bal_key, 0.0)
+                    
+                    eb_curr = eb_map.get((wm_id, month_year, month_num, slot), {})
+                    if (wm_id, month_year, month_num, slot) in eb_map:
+                        opening = eb_curr.get('banking_units', 0.0)
+                        
+                    next_m = month_num + 1
+                    next_y = month_year
+                    if next_m > 12:
+                        next_m = 1
+                        next_y = month_year + 1
+                        
+                    eb_next = eb_map.get((wm_id, next_y, next_m, slot), {})
+                    ao_curr = ao_map.get((wm_id, month_year, month_num, slot), {})
+                    
+                    if (wm_id, next_y, next_m, slot) in eb_map:
+                        ending = eb_next.get('banking_units', 0.0)
+                    elif (wm_id, month_year, month_num, slot) in ao_map:
+                        ending = ao_curr.get('balance_banking', 0.0)
+                    else:
+                        ending = None
+                        
+                    if (wm_id, month_year, month_num, slot) in ao_map:
+                        utilized = ao_curr.get('from_banking', 0.0)
+                    elif (wm_id, month_year, month_num, slot) in aa_map:
+                        utilized = aa_map.get((wm_id, month_year, month_num, slot), 0.0)
+                    else:
+                        if ending is not None:
+                            utilized = max(0.0, opening - ending)
+                        else:
+                            utilized = 0.0
+                            
+                    if ending is None:
+                        ending = max(0.0, opening - utilized)
+                        
+                    if ending > (opening - utilized):
+                        added = ending - (opening - utilized)
+                    else:
+                        added = 0.0
+                        
+                    running_balances[bal_key] = ending
+                    
+                    slot_records.append({
+                        "slot": slot.upper(),
+                        "opening": opening,
+                        "utilized": utilized,
+                        "added": added,
+                        "ending": ending
+                    })
+                    
+                    w_opening += opening
+                    w_utilized += utilized
+                    w_added += added
+                    w_ending += ending
+                    
+                windmill_records.append({
+                    "windmillNumber": wm_num,
+                    "opening": w_opening,
+                    "utilized": w_utilized,
+                    "added": w_added,
+                    "ending": w_ending,
+                    "slots": slot_records
+                })
+                
+                m_opening += w_opening
+                m_utilized += w_utilized
+                m_added += w_added
+                m_ending += w_ending
+                
+            monthly_data.append({
+                "monthName": month_name,
+                "displayMonth": f"{month_name} {month_year}",
+                "year": month_year,
+                "month": month_num,
+                "opening": m_opening,
+                "utilized": m_utilized,
+                "added": m_added,
+                "ending": m_ending,
+                "windmills": windmill_records
+            })
+            
+        return {"status": "success", "data": monthly_data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cursor.close()
+        conn.close()
+

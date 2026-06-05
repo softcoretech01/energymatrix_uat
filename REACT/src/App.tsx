@@ -39,6 +39,7 @@ import EBBillPdf from "./pages/windmill/eb_bill/EBBillPdf";
 import EBStatementSolarPdf from "./pages/eb_statement_solar/EBStatementSolarPdf";
 
 import BankReport from "./pages/report/Report";
+import MonthlyReport from "./pages/report/monthly_report";
 import ForecastReport from "./pages/forecast_report/ForecastReport";
 import BillingBankReport from "./pages/billing_report/BillingReport";
 
@@ -172,6 +173,7 @@ const App = () => (
               <Route path="/eb-statement-solar/pdf" element={<EBStatementSolarPdf />} />
               <Route path="/eb-statement-solar/comparison" element={<EBSolarChargeComparison />} />
               <Route path="/reports/banking" element={<BankReport />} />
+              <Route path="/reports/monthly-banking" element={<MonthlyReport />} />
               <Route path="/consumption-bank-report" element={<Navigate to="/forecast-report" replace />} />
               <Route path="/forecast-report" element={<ForecastReport />} />
               <Route path="/billing-bank-report" element={<BillingBankReport />} />
