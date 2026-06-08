@@ -98,7 +98,7 @@ async def get_banking_utilized(year: int, mode: str = "financial", current_user:
                 TRIM(a.energy_number) as windmill_number,
                 a.actual_year as year,
                 a.actual_month as month,
-                COALESCE(SUM(a.calculated_wheeling_value), 0) as total_calculated_wheeling_value
+                COALESCE(SUM(COALESCE(a.updated_windmill_unit, a.calculated_wheeling_value)), 0) as total_calculated_wheeling_value
             FROM windmill.actual a
             WHERE (
                 (%(mode)s = 'financial' AND ((a.actual_year = %(year)s AND a.actual_month >= 4) OR (a.actual_year = %(year)s + 1 AND a.actual_month <= 3)))
